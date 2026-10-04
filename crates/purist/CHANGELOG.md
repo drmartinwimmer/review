@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/drmartinwimmer/review/compare/purist-v0.2.0...purist-v0.3.0) (2026-10-04)
+
+
+### Features
+
+* **check:** reflect purist rename, add markdown/toml/json checks, and use affirmative boolean naming ([11e3dc7](https://github.com/drmartinwimmer/review/commit/11e3dc7fda10be7a7a339d37a9f928f1fc888a3f))
+* Milestone 3 — linter & formatter runner aggregator (code-review check) ([cf4c469](https://github.com/drmartinwimmer/review/commit/cf4c469f2b6291440f20562ef3b0eb28906759bf))
+* **purist:** add googletest_conventions lint rule ([0045346](https://github.com/drmartinwimmer/review/commit/004534687742a087ff9bcbfe9fc2a0ebc6ef4fa5))
+* **purist:** add googletest_conventions lint rule ([69541f1](https://github.com/drmartinwimmer/review/commit/69541f14a957e7e864fcea2202d3dfbf6bbc2ec6))
+* **purist:** add no_double_negation lint rule ([6fcff2b](https://github.com/drmartinwimmer/review/commit/6fcff2b6aabcf4e40f6c33e56747ceb0cd6918aa))
+* **purist:** add no_double_negation lint rule ([b98740b](https://github.com/drmartinwimmer/review/commit/b98740b0457dabff981b3b85302b77d0b12983b2))
+
 ## [0.2.0](https://github.com/drmartinwimmer/review/compare/purist-v0.1.0...purist-v0.2.0) (2026-10-04)
 
 ### Features

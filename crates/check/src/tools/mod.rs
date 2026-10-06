@@ -1,3 +1,4 @@
+pub mod api;
 pub mod cargo_audit;
 pub mod cargo_clippy;
 pub mod cargo_fmt;
@@ -8,6 +9,7 @@ pub mod purist;
 pub mod toml;
 pub mod vcs_jj;
 
+pub use api::ApiRunner;
 pub use cargo_audit::{AuditRunner, parse_audit_json};
 pub use cargo_clippy::{ClippyRunner, parse_clippy_json_stream};
 pub use cargo_fmt::{FmtRunner, parse_fmt_output};

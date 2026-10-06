@@ -1,5 +1,6 @@
 pub mod cargo;
 pub mod diagnostics;
+pub mod discovery;
 pub mod engine;
 pub mod reporter;
 pub mod rules;
@@ -7,10 +8,17 @@ pub mod rules;
 pub use cargo::{LintConfig, OpinionatedLintsConfig, PuristLintsConfig, RuleLevel};
 use clap::Args;
 pub use diagnostics::{Diagnostic, DiagnosticReport, ReportSummary, Severity, Span};
+pub use discovery::discover_rust_files;
 pub use engine::{LintContext, OpinionatedEngine, PuristEngine, Rule};
 pub use reporter::{OutputFormat, render_report, render_report_with_options};
 pub use rules::default_rules;
 use std::path::{Path, PathBuf};
+
+/// Trait implemented by structures representing configuration file contents.
+pub trait ConfigFile {
+    /// Returns the configuration file path relative to workspace or project root.
+    fn config_file_path() -> &'static str;
+}
 
 /// Error type for purist linter execution.
 #[derive(Debug, thiserror::Error)]

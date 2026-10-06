@@ -156,6 +156,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "code-review-config"
+version = "0.1.0"
+dependencies = [
+ "code-review-config-derive",
+ "googletest",
+]
+
+[[package]]
+name = "code-review-config-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "code-review-configure-lints"
 version = "0.1.0"
 dependencies = [

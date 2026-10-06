@@ -16,7 +16,7 @@ toml_edit = "0.22"
 thiserror = "2.0"
 googletest = "0.14"
 quote = "1.0"
-syn = "2.0"
+syn = { version = "2.0", features = ["full", "extra-traits"] }
 code-review-configure-lints = { path = "crates/configure-lints", version = "0.1.0" }
 code-review-check = { path = "crates/check", version = "0.2.0" }
 purist = "0.4.0"

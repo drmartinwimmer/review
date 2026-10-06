@@ -1,4 +1,4 @@
-pub mod cargo_toml;
+mod cargo_toml;
 
 pub use cargo_toml::{CargoTomlError, ConfigureResult, LintProfile, configure_lints, remove_lints};
 use std::path::{Path, PathBuf};

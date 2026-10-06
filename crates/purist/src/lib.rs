@@ -1,8 +1,8 @@
-pub mod cargo;
-pub mod diagnostics;
-pub mod engine;
-pub mod reporter;
-pub mod rules;
+mod cargo;
+mod diagnostics;
+mod engine;
+mod reporter;
+mod rules;
 
 pub use cargo::{LintConfig, OpinionatedLintsConfig, PuristLintsConfig, RuleLevel};
 use clap::Args;

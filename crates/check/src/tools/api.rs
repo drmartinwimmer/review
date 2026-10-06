@@ -211,6 +211,9 @@ mod tests {
 "#;
         fs::write(temp_dir.join("API.md"), modified_manifest)?;
 
+        // Introduce breaking removal
+        fs::write(src_dir.join("lib.rs"), "// removed\n")?;
+
         let runner = ApiRunner::new(&temp_dir);
         let diags = runner.run()?;
         assert_that!(diags.len(), eq(1));

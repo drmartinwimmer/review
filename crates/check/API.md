@@ -63,3 +63,25 @@
 - `pub use tools::PuristRunner;`
 - `pub use tools::TomlRunner;`
 - `pub use tools::filter_diagnostics_by_changed_files;`
+
+## 2. CLI API
+
+### `check`
+
+Aggregates formatters, clippy, purist, audit, and coverage checks
+
+| Flag / Argument  | Type      | Required | Default    | Description                                                                         |
+| ---------------- | --------- | -------- | ---------- | ----------------------------------------------------------------------------------- |
+| `--api`          | `-`       | No       | `true`     | Run API manifest drift checks (enabled by default; set to false to skip)            |
+| `--audit`        | `-`       | No       | `true`     | Run cargo audit dependency security scan (enabled by default; set to false to skip) |
+| `--changed-only` | `-`       | No       | `-`        | Filter diagnostics to only files modified in Jujutsu working copy                   |
+| `--clippy`       | `-`       | No       | `true`     | Run cargo clippy checks (enabled by default; set to false to skip)                  |
+| `--fail-on`      | `FAIL_ON` | No       | `warnings` | Severity threshold triggering non-zero exit code                                    |
+| `--fmt`          | `-`       | No       | `true`     | Run cargo fmt checks (enabled by default; set to false to skip)                     |
+| `--format`       | `FORMAT`  | No       | `-`        | Output format for reports and diagnostics                                           |
+| `--json`         | `-`       | No       | `true`     | Run JSON format/lint checks (enabled by default; set to false to skip)              |
+| `--markdown`     | `-`       | No       | `true`     | Run markdown format/lint checks (enabled by default; set to false to skip)          |
+| `--path`         | `PATH`    | No       | `-`        | Path to target workspace or crate directory                                         |
+| `--purist`       | `-`       | No       | `true`     | Run purist AST linter checks (enabled by default; set to false to skip)             |
+| `-q`, `--quiet`  | `-`       | No       | `-`        | Silence non-essential logging output                                                |
+| `--toml`         | `-`       | No       | `true`     | Run TOML format/lint checks (enabled by default; set to false to skip)              |

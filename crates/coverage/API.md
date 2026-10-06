@@ -18,3 +18,14 @@
 - `pub fn CoverageCommand::new(threshold: Option < f64 >, quiet: bool) -> Self` — _Creates a new `CoverageCommand` instance._
 - `pub fn CoverageCommand::run(self) -> Result < () , CoverageError >` — _Runs the code coverage measurement and threshold verification._
 - `pub fn CoverageCommand::threshold(& self) -> Option < f64 >` — _Returns the coverage threshold, if specified._
+
+## 2. CLI API
+
+### `coverage`
+
+Run LLVM source-based coverage gates
+
+| Flag / Argument | Type        | Required | Default | Description                           |
+| --------------- | ----------- | -------- | ------- | ------------------------------------- |
+| `-q`, `--quiet` | `-`         | No       | `-`     | Silence non-essential logging output  |
+| `--threshold`   | `THRESHOLD` | No       | `-`     | Minimum coverage threshold percentage |

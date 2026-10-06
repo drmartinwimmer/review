@@ -1,27 +1,28 @@
-pub mod cargo_audit;
-pub mod cargo_clippy;
-pub mod cargo_fmt;
-pub mod file_utils;
-pub mod json;
-pub mod markdown;
-pub mod purist;
-pub mod toml;
-pub mod vcs_jj;
+pub(crate) mod api;
+pub(crate) mod cargo_audit;
+pub(crate) mod cargo_clippy;
+pub(crate) mod cargo_fmt;
+pub(crate) mod file_utils;
+pub(crate) mod json;
+pub(crate) mod markdown;
+pub(crate) mod purist;
+pub(crate) mod toml;
+pub(crate) mod vcs_jj;
 
-pub use cargo_audit::{AuditRunner, parse_audit_json};
-pub use cargo_clippy::{ClippyRunner, parse_clippy_json_stream};
-pub use cargo_fmt::{FmtRunner, parse_fmt_output};
-pub use file_utils::{find_files_with_extensions, is_tool_available};
-pub use json::{JsonRunner, parse_prettier_json_output};
-pub use markdown::{MarkdownRunner, parse_mdformat_output, parse_prettier_markdown_output};
-pub use purist::{OpinionatedRunner, PuristRunner};
-pub use toml::{TomlRunner, parse_taplo_output};
-pub use vcs_jj::{JjError, JjVcs, filter_diagnostics_by_changed_files, parse_jj_diff_summary};
+pub(crate) use api::ApiRunner;
+pub(crate) use cargo_audit::AuditRunner;
+pub(crate) use cargo_clippy::ClippyRunner;
+pub(crate) use cargo_fmt::FmtRunner;
+pub(crate) use json::JsonRunner;
+pub(crate) use markdown::MarkdownRunner;
+pub(crate) use purist::PuristRunner;
+pub(crate) use toml::TomlRunner;
+pub(crate) use vcs_jj::{JjError, JjVcs, filter_diagnostics_by_changed_files};
 
 use ::purist::{Diagnostic, DiagnosticReport};
 
 /// Aggregates diagnostics from multiple checking tools into a consolidated `DiagnosticReport`.
-pub fn aggregate_diagnostics(
+pub(crate) fn aggregate_diagnostics(
     fmt_diags: Vec<Diagnostic>,
     clippy_diags: Vec<Diagnostic>,
     purist_report: DiagnosticReport,

@@ -16,6 +16,8 @@ clap = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+code-review-diagnostics = { workspace = true }
+code-review-api = { workspace = true }
 purist = { workspace = true }
 toml_edit = { workspace = true }
 

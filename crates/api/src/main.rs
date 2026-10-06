@@ -1,5 +1,5 @@
 use clap::Parser;
-use code_review_api::ApiCommand;
+use code_review_api::{ApiCommand, ApiError};
 use std::process::ExitCode;
 
 #[derive(Parser, Debug)]
@@ -15,11 +15,13 @@ struct Cli {
 
 impl Cli {
     fn run(self) -> ExitCode {
-        if let Err(err) = self.cmd.run() {
-            eprintln!("Error: {err}");
-            ExitCode::from(2)
-        } else {
-            ExitCode::SUCCESS
+        match self.cmd.run() {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(ApiError::DriftDetected { .. }) => ExitCode::from(1),
+            Err(err) => {
+                eprintln!("Error: {err}");
+                ExitCode::from(2)
+            }
         }
     }
 }

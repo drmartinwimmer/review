@@ -397,9 +397,9 @@ When an agent reviews code, it dispatches specialized review subagents in parall
 ### Milestone 4: API Manifest Engine & Auditor (`code-review api`)
 
 - **Description:** Implement `code-review api dump` and `code-review api check` to inspect and dump public API surfaces for libraries (public items), binary CLIs (subcommands/flags), and HTTP services (endpoints). Integrate manifest drift checks into `code-review check`.
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Target Completion Date:** 2026-10-15
-- **Actual Completion Date:** -
+- **Actual Completion Date:** 2026-10-04
 - **Dependencies:** Milestone 3
 - **Tasks File:** `plan/M4.md`
 - **Feedback File:** `plan/FEEDBACK_M4.md`
@@ -542,21 +542,27 @@ When an agent reviews code, it dispatches specialized review subagents in parall
 
 ### Milestone 4: API Manifest Engine & Auditor (`code-review api`)
 
-- [ ] **M4-T0: Update Specifications (`src/tools/api/SPEC.md`)**
+- [x] **M4-T0: Update Specifications (`crates/api/SPEC.md`, `plan/M4.md`, `plan/FEEDBACK_M4.md`)**
   - Define invariants for API surface extraction, manifest formatting in `API.md`, drift comparison rules, and breaking change classification.
   - Describe Jujutsu change: `jj describe -m "plan-M4-T0: docs: add spec for API manifest engine"`
-- [ ] **M4-T1: Surface Extractors for Library, CLI, and HTTP (`src/tools/api/`)**
+- [x] **M4-T1: Surface Extractors for Library, CLI, and HTTP (`crates/api/src/extractors/`)**
   - Implement `library.rs`: Extract public structs, enums, functions, traits, and types.
-  - Implement `cli_extractor.rs`: Introspect `clap::Command` to extract subcommands, arguments, flags, and help text.
-  - Implement `http_extractor.rs`: Extract route paths, HTTP methods, and payload models.
+  - Implement `cli.rs`: Introspect `clap::Command` and parse Clap derive attributes to extract subcommands, arguments, flags, and help text.
+  - Implement `http.rs`: Extract route paths, HTTP methods, and payload models from Axum router chains and route attributes.
   - Unit test extractors on sample crates.
   - Describe Jujutsu change: `jj describe -m "plan-M4-T1: feat: implement library, cli, and http API extractors"`
-- [ ] **M4-T2: Manifest Formatter and Drift Differ (`src/tools/api/manifest.rs`, `diff.rs`)**
+- [x] **M4-T2: Manifest Formatter and Drift Differ (`crates/api/src/manifest.rs`, `diff.rs`)**
   - Implement `manifest.rs`: Serialize extracted API surface into clean markdown `API.md` (or JSON).
   - Implement `diff.rs`: Compare active surface against checked-in `API.md`, categorizing additions, removals, and modifications.
   - Implement CLI subcommands: `code-review api dump` and `code-review api check`.
   - Wire drift check into `code-review check`.
   - Describe Jujutsu change: `jj describe -m "plan-M4-T2: feat: implement API.md manifest formatting, drift differ, and CLI commands"`
+- [x] **M4-T3: Milestone Completion & Quality Verification**
+  - Connect all commands into `code-review` top-level CLI and `code-review-check` aggregator.
+  - Generate checked-in `API.md` manifests where appropriate.
+  - Verify workspace passes `cargo test --all-targets --all-features`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo fmt --check`, and `cargo run -p purist -- --path .`.
+  - Update `plan/M4.md` and `PLAN.md` to mark Milestone 4 completed.
+  - Describe Jujutsu change: `jj describe -m "plan-M4-T3: docs: complete milestone 4 and update plan"`
 
 ### Milestone 5: Code Coverage Engine (`code-review coverage`) & CI Integration
 

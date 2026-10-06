@@ -13,6 +13,11 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { workspace = true }
+code-review-diagnostics = { workspace = true }
+quote = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+syn = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]

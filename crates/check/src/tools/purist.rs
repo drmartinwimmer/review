@@ -6,9 +6,6 @@ pub struct PuristRunner {
     target_path: PathBuf,
 }
 
-/// Backwards compatibility alias for `PuristRunner`.
-pub type OpinionatedRunner = PuristRunner;
-
 impl PuristRunner {
     /// Creates a new `PuristRunner` targeting the specified directory or file.
     pub fn new(target_path: impl Into<PathBuf>) -> Self {

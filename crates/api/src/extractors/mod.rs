@@ -4,10 +4,12 @@ use std::path::Path;
 
 pub(crate) mod cli;
 pub(crate) mod cli_args;
+pub(crate) mod http;
 pub(crate) mod library;
 pub(crate) mod library_format;
 
 pub(crate) use cli::CliExtractor;
+pub(crate) use http::HttpExtractor;
 pub(crate) use library::LibraryExtractor;
 
 /// High-level function that auto-detects targets and extracts the public API manifest from a crate root.
@@ -23,6 +25,11 @@ pub fn extract_crate_api(crate_root: &Path) -> std::io::Result<ApiManifest> {
     let cli_extractor = CliExtractor::new();
     if let Some(cli_api) = cli_extractor.extract_from_crate(crate_root)? {
         manifest = manifest.with_cli(cli_api);
+    }
+
+    let http_extractor = HttpExtractor::new();
+    if let Some(http_api) = http_extractor.extract_from_crate(crate_root)? {
+        manifest = manifest.with_http(http_api);
     }
 
     Ok(manifest)

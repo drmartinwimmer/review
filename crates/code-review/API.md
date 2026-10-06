@@ -23,3 +23,112 @@
 - `pub fn Cli::verbose(& self) -> u8` — _Returns the verbosity level._
 - `pub fn Commands::run(self) -> Result < () , CodeReviewError >` — _Executes the subcommand with default formatting._
 - `pub fn Commands::run_with_format(self, format: OutputFormat) -> Result < () , CodeReviewError >` — _Executes the subcommand with the specified report output format._
+
+## 2. CLI API
+
+### `code-review`
+
+Automated code review, static analysis, and lint configuration toolkit
+
+| Flag / Argument   | Type     | Required | Default   | Description                               |
+| ----------------- | -------- | -------- | --------- | ----------------------------------------- |
+| `--format`        | `FORMAT` | No       | `console` | Output format for reports and diagnostics |
+| `-q`, `--quiet`   | `-`      | No       | `-`       | Silence non-essential logging output      |
+| `-v`, `--verbose` | `-`      | No       | `-`       | Increase verbosity level (-v, -vv)        |
+
+**Subcommands:**
+
+- `api`
+- `check`
+- `configure-lints`
+- `coverage`
+- `purist`
+
+### `code-review api`
+
+Introspect and detect public API drift against API.md
+
+| Flag / Argument   | Type   | Required | Default | Description                                                    |
+| ----------------- | ------ | -------- | ------- | -------------------------------------------------------------- |
+| `--manifest-path` | `PATH` | No       | `-`     | Path to Cargo.toml or workspace root (backwards compatibility) |
+| `--path`          | `PATH` | No       | `-`     | Path to target workspace or crate directory                    |
+| `-q`, `--quiet`   | `-`    | No       | `-`     | Silence non-essential logging output                           |
+
+**Subcommands:**
+
+- `check`
+- `dump`
+
+### `code-review api check`
+
+Compare active codebase against the checked-in API manifest and detect drift
+
+| Flag / Argument    | Type      | Required | Default  | Description                                                            |
+| ------------------ | --------- | -------- | -------- | ---------------------------------------------------------------------- |
+| `--fail-on`        | `FAIL_ON` | No       | `any`    | Severity threshold triggering non-zero exit: any (default) or breaking |
+| `--format`         | `FORMAT`  | No       | `-`      | Output format for diagnostics                                          |
+| `-m`, `--manifest` | `PATH`    | No       | `API.md` | Path to checked-in API manifest file                                   |
+| `--path`           | `PATH`    | No       | `-`      | Path to target crate or workspace directory                            |
+| `-q`, `--quiet`    | `-`       | No       | `-`      | Silence non-essential logging output                                   |
+
+### `code-review api dump`
+
+Inspect codebase and generate or update the API manifest (API.md)
+
+| Flag / Argument  | Type     | Required | Default  | Description                                      |
+| ---------------- | -------- | -------- | -------- | ------------------------------------------------ |
+| `--format`       | `FORMAT` | No       | `-`      | Manifest serialization format (markdown or json) |
+| `-o`, `--output` | `PATH`   | No       | `API.md` | Output manifest file path                        |
+| `--path`         | `PATH`   | No       | `-`      | Path to target crate or workspace directory      |
+| `-q`, `--quiet`  | `-`      | No       | `-`      | Silence non-essential logging output             |
+
+### `code-review check`
+
+Aggregates formatters, clippy, purist, audit, and coverage checks
+
+| Flag / Argument   | Type      | Required | Default    | Description                                                       |
+| ----------------- | --------- | -------- | ---------- | ----------------------------------------------------------------- |
+| `--changed-only`  | `-`       | No       | `-`        | Filter diagnostics to only files modified in Jujutsu working copy |
+| `--fail-on`       | `FAIL_ON` | No       | `warnings` | Severity threshold triggering non-zero exit code                  |
+| `--format`        | `FORMAT`  | No       | `-`        | Output format for reports and diagnostics                         |
+| `--path`          | `PATH`    | No       | `-`        | Path to target workspace or crate directory                       |
+| `-q`, `--quiet`   | `-`       | No       | `-`        | Silence non-essential logging output                              |
+| `--skip-api`      | `-`       | No       | `-`        | Skip running API manifest drift checks                            |
+| `--skip-audit`    | `-`       | No       | `-`        | Skip running cargo audit                                          |
+| `--skip-clippy`   | `-`       | No       | `-`        | Skip running cargo clippy                                         |
+| `--skip-fmt`      | `-`       | No       | `-`        | Skip running cargo fmt                                            |
+| `--skip-json`     | `-`       | No       | `-`        | Skip running JSON format/lint checks                              |
+| `--skip-markdown` | `-`       | No       | `-`        | Skip running markdown format/lint checks                          |
+| `--skip-purist`   | `-`       | No       | `-`        | Skip running purist AST linter                                    |
+| `--skip-toml`     | `-`       | No       | `-`        | Skip running TOML format/lint checks                              |
+
+### `code-review configure-lints`
+
+Configure or remove strict Clippy lints in Cargo.toml
+
+| Flag / Argument   | Type      | Required | Default      | Description                                        |
+| ----------------- | --------- | -------- | ------------ | -------------------------------------------------- |
+| `--manifest-path` | `PATH`    | No       | `Cargo.toml` | Path to the Cargo.toml manifest to configure       |
+| `--profile`       | `PROFILE` | No       | `strict`     | Lint profile preset to inject (strict or standard) |
+| `-q`, `--quiet`   | `-`       | No       | `-`          | Silence non-essential logging output               |
+| `--remove`        | `-`       | No       | `-`          | Remove configured lints instead of injecting them  |
+
+### `code-review coverage`
+
+Run LLVM source-based coverage gates
+
+| Flag / Argument | Type        | Required | Default | Description                           |
+| --------------- | ----------- | -------- | ------- | ------------------------------------- |
+| `-q`, `--quiet` | `-`         | No       | `-`     | Silence non-essential logging output  |
+| `--threshold`   | `THRESHOLD` | No       | `-`     | Minimum coverage threshold percentage |
+
+### `code-review purist`
+
+Run AST-based purist linter rules
+
+| Flag / Argument | Type     | Required | Default | Description                                      |
+| --------------- | -------- | -------- | ------- | ------------------------------------------------ |
+| `--fix`         | `-`      | No       | `-`     | Automatically apply fixes where supported (stub) |
+| `--format`      | `FORMAT` | No       | `-`     | Output format for reports and diagnostics        |
+| `--path`        | `PATH`   | No       | `-`     | Path to source files or crate directory          |
+| `-q`, `--quiet` | `-`      | No       | `-`     | Silence non-essential logging output             |

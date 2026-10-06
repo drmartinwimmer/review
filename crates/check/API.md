@@ -44,3 +44,25 @@
 - `pub fn CheckCommand::with_opinionated(self, enabled: bool) -> Self` — _Backwards compatibility alias for `with_purist`._
 - `pub fn CheckCommand::with_purist(mut self, enabled: bool) -> Self` — _Enables or disables purist AST linter checks._
 - `pub fn CheckCommand::with_toml(mut self, enabled: bool) -> Self` — _Enables or disables TOML format/lint checks._
+
+## 2. CLI API
+
+### `check`
+
+Aggregates formatters, clippy, purist, audit, and coverage checks
+
+| Flag / Argument   | Type      | Required | Default    | Description                                                       |
+| ----------------- | --------- | -------- | ---------- | ----------------------------------------------------------------- |
+| `--changed-only`  | `-`       | No       | `-`        | Filter diagnostics to only files modified in Jujutsu working copy |
+| `--fail-on`       | `FAIL_ON` | No       | `warnings` | Severity threshold triggering non-zero exit code                  |
+| `--format`        | `FORMAT`  | No       | `-`        | Output format for reports and diagnostics                         |
+| `--path`          | `PATH`    | No       | `-`        | Path to target workspace or crate directory                       |
+| `-q`, `--quiet`   | `-`       | No       | `-`        | Silence non-essential logging output                              |
+| `--skip-api`      | `-`       | No       | `-`        | Skip running API manifest drift checks                            |
+| `--skip-audit`    | `-`       | No       | `-`        | Skip running cargo audit                                          |
+| `--skip-clippy`   | `-`       | No       | `-`        | Skip running cargo clippy                                         |
+| `--skip-fmt`      | `-`       | No       | `-`        | Skip running cargo fmt                                            |
+| `--skip-json`     | `-`       | No       | `-`        | Skip running JSON format/lint checks                              |
+| `--skip-markdown` | `-`       | No       | `-`        | Skip running markdown format/lint checks                          |
+| `--skip-purist`   | `-`       | No       | `-`        | Skip running purist AST linter                                    |
+| `--skip-toml`     | `-`       | No       | `-`        | Skip running TOML format/lint checks                              |

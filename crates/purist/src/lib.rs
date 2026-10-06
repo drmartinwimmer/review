@@ -5,7 +5,6 @@ pub mod reporter;
 pub mod rules;
 
 pub use cargo::{LintConfig, OpinionatedLintsConfig, PuristLintsConfig, RuleLevel};
-use clap::Args;
 pub use diagnostics::{Diagnostic, DiagnosticReport, ReportSummary, Severity, Span};
 pub use engine::{LintContext, OpinionatedEngine, PuristEngine, Rule};
 pub use reporter::{OutputFormat, render_report, render_report_with_options};
@@ -28,31 +27,27 @@ pub enum PuristError {
 /// Backwards compatibility alias for `PuristError`.
 pub type OpinionatedError = PuristError;
 
-/// Arguments for the purist linter subcommand.
-#[derive(Args, Debug, Clone, Default, PartialEq, Eq)]
-pub struct PuristCommand {
-    /// Path to source files or crate directory
-    #[arg(long)]
-    path: Option<PathBuf>,
+/// Execution options for running purist linter checks.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PuristOptions {
+    /// Path to source files or crate directory.
+    pub path: Option<PathBuf>,
 
-    /// Output format for reports and diagnostics
-    #[arg(long, value_enum)]
-    format: Option<OutputFormat>,
+    /// Output format for reports and diagnostics.
+    pub format: Option<OutputFormat>,
 
-    /// Automatically apply fixes where supported (stub)
-    #[arg(long)]
-    fix: bool,
+    /// Automatically apply fixes where supported (stub).
+    pub fix: bool,
 
-    /// Silence non-essential logging output
-    #[arg(short, long)]
-    quiet: bool,
+    /// Silence non-essential logging output.
+    pub quiet: bool,
 }
 
-/// Backwards compatibility alias for `PuristCommand`.
-pub type OpinionatedCommand = PuristCommand;
+/// Backwards compatibility alias for `PuristOptions`.
+pub type OpinionatedOptions = PuristOptions;
 
-impl PuristCommand {
-    /// Creates a new `PuristCommand` instance.
+impl PuristOptions {
+    /// Creates a new `PuristOptions` instance.
     pub fn new(path: Option<PathBuf>, quiet: bool) -> Self {
         Self {
             path,
@@ -61,66 +56,34 @@ impl PuristCommand {
             quiet,
         }
     }
+}
 
-    /// Sets the output format.
-    pub fn with_format(mut self, format: OutputFormat) -> Self {
-        self.format = Some(format);
-        self
+/// Executes the purist rules against the target path and returns the report.
+pub fn execute(options: &PuristOptions) -> Result<DiagnosticReport, PuristError> {
+    let target_path = options.path.as_deref().unwrap_or_else(|| Path::new("."));
+
+    if !target_path.exists() {
+        return Err(PuristError::PathNotFound(target_path.to_path_buf()));
     }
 
-    /// Sets the fix flag.
-    pub fn with_fix(mut self, fix: bool) -> Self {
-        self.fix = fix;
-        self
-    }
+    let engine = PuristEngine::new();
+    let report = engine.check_path(target_path)?;
+    Ok(report)
+}
 
-    /// Returns the target path, if specified.
-    pub fn path(&self) -> Option<&Path> {
-        self.path.as_deref()
-    }
+/// Runs the purist static analysis checks and renders diagnostics.
+pub fn run(options: &PuristOptions) -> Result<(), PuristError> {
+    let format = options.format.unwrap_or(OutputFormat::Console);
+    let report = execute(options)?;
 
-    /// Returns the specified output format, if any.
-    pub fn format(&self) -> Option<OutputFormat> {
-        self.format
-    }
+    render_report(&report, format, &mut std::io::stdout())?;
 
-    /// Returns whether automated fixing is requested.
-    pub fn is_fix(&self) -> bool {
-        self.fix
-    }
-
-    /// Returns whether logging output is suppressed.
-    pub fn is_quiet(&self) -> bool {
-        self.quiet
-    }
-
-    /// Executes the purist rules against the target path and returns the report.
-    pub fn execute(self) -> Result<DiagnosticReport, PuristError> {
-        let target_path = self.path.as_deref().unwrap_or_else(|| Path::new("."));
-
-        if !target_path.exists() {
-            return Err(PuristError::PathNotFound(target_path.to_path_buf()));
-        }
-
-        let engine = PuristEngine::new();
-        let report = engine.check_path(target_path)?;
-        Ok(report)
-    }
-
-    /// Runs the purist static analysis checks and renders diagnostics.
-    pub fn run(self) -> Result<(), PuristError> {
-        let format = self.format.unwrap_or(OutputFormat::Console);
-        let report = self.execute()?;
-
-        render_report(&report, format, &mut std::io::stdout())?;
-
-        if !report.is_empty() {
-            Err(PuristError::LintViolationsFound {
-                count: report.diagnostics.len(),
-            })
-        } else {
-            Ok(())
-        }
+    if !report.is_empty() {
+        Err(PuristError::LintViolationsFound {
+            count: report.diagnostics.len(),
+        })
+    } else {
+        Ok(())
     }
 }
 
@@ -134,8 +97,8 @@ mod tests {
     fn run_purist_command_on_missing_path_returns_error() -> Result<(), Box<dyn std::error::Error>>
     {
         let missing = PathBuf::from("does_not_exist_12345.rs");
-        let cmd = PuristCommand::new(Some(missing.clone()), true);
-        match cmd.execute() {
+        let opts = PuristOptions::new(Some(missing.clone()), true);
+        match execute(&opts) {
             Err(PuristError::PathNotFound(p)) => {
                 assert_that!(p, eq(&missing));
             }
@@ -160,8 +123,8 @@ mod tests {
         let file_path = temp_dir.join("clean.rs");
         fs::write(&file_path, "pub fn add(a: i32, b: i32) -> i32 { a + b }\n")?;
 
-        let cmd = PuristCommand::new(Some(file_path), true);
-        let report = cmd.execute()?;
+        let opts = PuristOptions::new(Some(file_path), true);
+        let report = execute(&opts)?;
 
         assert_that!(report.is_empty(), is_true());
         Ok(())
@@ -178,8 +141,8 @@ mod tests {
             "pub fn fail() -> Result<(), String> { Err(\"bad\".to_string()) }\n",
         )?;
 
-        let cmd = PuristCommand::new(Some(file_path), true);
-        let result = cmd.run();
+        let opts = PuristOptions::new(Some(file_path), true);
+        let result = run(&opts);
 
         match result {
             Err(PuristError::LintViolationsFound { count }) => {
@@ -192,14 +155,14 @@ mod tests {
 
     #[googletest::test]
     fn parse_purist_command_with_options() -> Result<(), Box<dyn std::error::Error>> {
-        let cmd = PuristCommand::new(Some(PathBuf::from("src")), false)
-            .with_format(OutputFormat::Json)
-            .with_fix(true);
+        let mut opts = PuristOptions::new(Some(PathBuf::from("src")), false);
+        opts.format = Some(OutputFormat::Json);
+        opts.fix = true;
 
-        assert_that!(cmd.path(), eq(Some(Path::new("src"))));
-        assert_that!(cmd.format(), eq(Some(OutputFormat::Json)));
-        assert_that!(cmd.is_fix(), is_true());
-        assert_that!(cmd.is_quiet(), is_false());
+        assert_that!(&opts.path, eq(&Some(PathBuf::from("src"))));
+        assert_that!(opts.format, eq(Some(OutputFormat::Json)));
+        assert_that!(opts.fix, is_true());
+        assert_that!(opts.quiet, is_false());
         Ok(())
     }
 }

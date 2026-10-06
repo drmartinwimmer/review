@@ -1,30 +1,26 @@
 pub mod cargo_toml;
 
 pub use cargo_toml::{CargoTomlError, ConfigureResult, LintProfile, configure_lints, remove_lints};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Command-line arguments for configuring or removing Clippy lints in Cargo.toml.
-#[derive(clap::Args, Debug, Clone, PartialEq, Eq)]
-pub struct ConfigureLintsCommand {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfigureLintsOptions {
     /// Path to the Cargo.toml manifest to configure
-    #[arg(long, default_value = "Cargo.toml")]
-    manifest_path: PathBuf,
+    pub manifest_path: PathBuf,
 
     /// Lint profile preset to inject (strict or standard)
-    #[arg(long, value_enum, default_value_t = LintProfile::Strict)]
-    profile: LintProfile,
+    pub profile: LintProfile,
 
     /// Remove configured lints instead of injecting them
-    #[arg(long)]
-    remove: bool,
+    pub remove: bool,
 
     /// Silence non-essential logging output
-    #[arg(short, long)]
-    quiet: bool,
+    pub quiet: bool,
 }
 
-impl ConfigureLintsCommand {
-    /// Creates a new `ConfigureLintsCommand` instance.
+impl ConfigureLintsOptions {
+    /// Creates a new `ConfigureLintsOptions` instance.
     pub fn new(
         manifest_path: impl Into<PathBuf>,
         profile: LintProfile,
@@ -38,65 +34,13 @@ impl ConfigureLintsCommand {
             quiet,
         }
     }
+}
 
-    /// Returns the manifest path targeted by this command.
-    pub fn manifest_path(&self) -> &Path {
-        &self.manifest_path
-    }
-
-    /// Returns the lint profile preset.
-    pub fn profile(&self) -> LintProfile {
-        self.profile
-    }
-
-    /// Returns whether lints should be removed rather than configured.
-    pub fn is_remove(&self) -> bool {
-        self.remove
-    }
-
-    /// Returns whether logging output is suppressed.
-    pub fn is_quiet(&self) -> bool {
-        self.quiet
-    }
-
-    /// Executes the configuration or removal of Clippy lints in the target manifest.
-    pub fn run(self) -> Result<(), CargoTomlError> {
-        if self.remove {
-            let result = remove_lints(&self.manifest_path)?;
-            if !self.quiet {
-                if result.modified {
-                    eprintln!(
-                        "Removed {} Clippy lints from '{}'.",
-                        result.lints_configured,
-                        self.manifest_path.display()
-                    );
-                } else {
-                    eprintln!(
-                        "No Clippy lints found in '{}'. Manifest unchanged.",
-                        self.manifest_path.display()
-                    );
-                }
-            }
-        } else {
-            let result = configure_lints(&self.manifest_path, self.profile)?;
-            if !self.quiet {
-                if result.modified {
-                    eprintln!(
-                        "Configured {} Clippy lints ({:?} profile) in '{}'.",
-                        result.lints_configured,
-                        self.profile,
-                        self.manifest_path.display()
-                    );
-                } else {
-                    eprintln!(
-                        "Manifest '{}' already configured with {} Clippy lints ({:?} profile). Manifest unchanged.",
-                        self.manifest_path.display(),
-                        result.lints_configured,
-                        self.profile
-                    );
-                }
-            }
-        }
-        Ok(())
+/// Executes the configuration or removal of Clippy lints in the target manifest according to options.
+pub fn run(options: &ConfigureLintsOptions) -> Result<ConfigureResult, CargoTomlError> {
+    if options.remove {
+        remove_lints(&options.manifest_path)
+    } else {
+        configure_lints(&options.manifest_path, options.profile)
     }
 }

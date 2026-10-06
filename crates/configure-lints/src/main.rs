@@ -1,5 +1,7 @@
 use clap::Parser;
-use code_review_configure_lints::ConfigureLintsCommand;
+use code_review_configure_lints::ConfigureLintsOptions;
+use code_review_configure_lints::cargo_toml::LintProfile;
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 #[derive(Parser, Debug)]
@@ -9,17 +11,73 @@ use std::process::ExitCode;
     version
 )]
 struct Cli {
-    #[command(flatten)]
-    cmd: ConfigureLintsCommand,
+    /// Path to the Cargo.toml manifest to configure
+    #[arg(long, default_value = "Cargo.toml")]
+    manifest_path: PathBuf,
+
+    /// Lint profile preset to inject (strict or standard)
+    #[arg(long, value_enum, default_value_t = LintProfile::Strict)]
+    profile: LintProfile,
+
+    /// Remove configured lints instead of injecting them
+    #[arg(long)]
+    remove: bool,
+
+    /// Silence non-essential logging output
+    #[arg(short, long)]
+    quiet: bool,
 }
 
 impl Cli {
+    fn to_options(&self) -> ConfigureLintsOptions {
+        ConfigureLintsOptions {
+            manifest_path: self.manifest_path.clone(),
+            profile: self.profile,
+            remove: self.remove,
+            quiet: self.quiet,
+        }
+    }
+
     fn run(self) -> ExitCode {
-        if let Err(err) = self.cmd.run() {
-            eprintln!("Error: {err}");
-            ExitCode::from(2)
-        } else {
-            ExitCode::SUCCESS
+        let opts = self.to_options();
+        match code_review_configure_lints::run(&opts) {
+            Ok(result) => {
+                if !opts.quiet {
+                    if opts.remove {
+                        if result.modified {
+                            eprintln!(
+                                "Removed {} Clippy lints from '{}'.",
+                                result.lints_configured,
+                                opts.manifest_path.display()
+                            );
+                        } else {
+                            eprintln!(
+                                "No Clippy lints found in '{}'. Manifest unchanged.",
+                                opts.manifest_path.display()
+                            );
+                        }
+                    } else if result.modified {
+                        eprintln!(
+                            "Configured {} Clippy lints ({:?} profile) in '{}'.",
+                            result.lints_configured,
+                            opts.profile,
+                            opts.manifest_path.display()
+                        );
+                    } else {
+                        eprintln!(
+                            "Manifest '{}' already configured with {} Clippy lints ({:?} profile). Manifest unchanged.",
+                            opts.manifest_path.display(),
+                            result.lints_configured,
+                            opts.profile
+                        );
+                    }
+                }
+                ExitCode::SUCCESS
+            }
+            Err(err) => {
+                eprintln!("Error: {err}");
+                ExitCode::from(2)
+            }
         }
     }
 }
@@ -73,8 +131,12 @@ mod tests {
             "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
         )?;
 
-        let cmd = ConfigureLintsCommand::new(&manifest_path, LintProfile::Strict, false, true);
-        let cli = Cli { cmd };
+        let cli = Cli {
+            manifest_path: manifest_path.clone(),
+            profile: LintProfile::Strict,
+            remove: false,
+            quiet: true,
+        };
         let exit_code = cli.run();
         expect_that!(exit_code, eq(ExitCode::SUCCESS));
 
@@ -88,8 +150,12 @@ mod tests {
         let guard = TempDirGuard::new("test_configure_lints_missing");
         let manifest_path = guard.path().join("NonExistent.toml");
 
-        let cmd = ConfigureLintsCommand::new(&manifest_path, LintProfile::Strict, false, true);
-        let cli = Cli { cmd };
+        let cli = Cli {
+            manifest_path,
+            profile: LintProfile::Strict,
+            remove: false,
+            quiet: true,
+        };
         let exit_code = cli.run();
         expect_that!(exit_code, eq(ExitCode::from(2)));
     }

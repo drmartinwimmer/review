@@ -4,11 +4,13 @@ use std::path::Path;
 
 pub(crate) mod cli;
 pub(crate) mod cli_args;
+pub(crate) mod config;
 pub(crate) mod http;
 pub(crate) mod library;
 pub(crate) mod library_format;
 
 pub(crate) use cli::CliExtractor;
+pub(crate) use config::ConfigExtractor;
 pub(crate) use http::HttpExtractor;
 pub(crate) use library::LibraryExtractor;
 
@@ -30,6 +32,11 @@ pub fn extract_crate_api(crate_root: &Path) -> std::io::Result<ApiManifest> {
     let http_extractor = HttpExtractor::new();
     if let Some(http_api) = http_extractor.extract_from_crate(crate_root)? {
         manifest = manifest.with_http(http_api);
+    }
+
+    let config_extractor = ConfigExtractor::new();
+    if let Some(config_api) = config_extractor.extract_from_crate(crate_root)? {
+        manifest = manifest.with_config(config_api);
     }
 
     Ok(manifest)

@@ -58,7 +58,7 @@ jobs:
       - name: Verify package & metadata
         run: |
           cargo metadata --format-version 1 --no-deps > /dev/null
-          cargo publish --dry-run -p purist
+          cargo publish --dry-run -p code-review-check
 
   test:
     name: Unit & Integration Tests

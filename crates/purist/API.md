@@ -83,3 +83,16 @@
 - `pub use engine::OpinionatedEngine;`
 - `pub use cargo::OpinionatedLintsConfig;`
 - `pub use engine::Rule;`
+
+## 2. CLI API
+
+### `purist`
+
+Fast purist AST linter for enforcing strict Rust code hygiene
+
+| Flag / Argument | Type     | Required | Default | Description                                      |
+| --------------- | -------- | -------- | ------- | ------------------------------------------------ |
+| `--fix`         | `-`      | No       | `-`     | Automatically apply fixes where supported (stub) |
+| `--format`      | `FORMAT` | No       | `-`     | Output format for reports and diagnostics        |
+| `--path`        | `PATH`   | No       | `-`     | Path to source files or crate directory          |
+| `-q`, `--quiet` | `-`      | No       | `-`     | Silence non-essential logging output             |

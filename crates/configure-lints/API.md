@@ -27,3 +27,16 @@
 - `pub fn ConfigureLintsCommand::new(manifest_path: impl Into < PathBuf >, profile: LintProfile, remove: bool, quiet: bool) -> Self` — _Creates a new `ConfigureLintsCommand` instance._
 - `pub fn ConfigureLintsCommand::profile(& self) -> LintProfile` — _Returns the lint profile preset._
 - `pub fn ConfigureLintsCommand::run(self) -> Result < () , CargoTomlError >` — _Executes the configuration or removal of Clippy lints in the target manifest._
+
+## 2. CLI API
+
+### `configure-lints`
+
+Configure or remove strict Clippy lints in Cargo.toml
+
+| Flag / Argument   | Type      | Required | Default      | Description                                        |
+| ----------------- | --------- | -------- | ------------ | -------------------------------------------------- |
+| `--manifest-path` | `PATH`    | No       | `Cargo.toml` | Path to the Cargo.toml manifest to configure       |
+| `--profile`       | `PROFILE` | No       | `strict`     | Lint profile preset to inject (strict or standard) |
+| `-q`, `--quiet`   | `-`       | No       | `-`          | Silence non-essential logging output               |
+| `--remove`        | `-`       | No       | `-`          | Remove configured lints instead of injecting them  |

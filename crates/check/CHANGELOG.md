@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.0](https://github.com/drmartinwimmer/review/compare/code-review-check-v0.2.0...code-review-check-v0.3.0) (2026-10-07)
+
+
+### Features
+
+* **purist:** add lib_facade_hygiene and no_negative_bool rules, and convert check flags to affirmative ([fc73e66](https://github.com/drmartinwimmer/review/commit/fc73e6698ff0ff444a72e0bb03a734bb4f2f13b9))
+* **purist:** add lib_facade_hygiene rule for concise library root files ([9b35fb7](https://github.com/drmartinwimmer/review/commit/9b35fb7d6581be1e5528f37d99b4af39a45ebadc))
+* **purist:** add max_nesting_depth rule to enforce code readability ([5b1c11e](https://github.com/drmartinwimmer/review/commit/5b1c11ec0e2db43a5be4762fe96b8b66f9090010))
+* **purist:** add max_nesting_depth rule to enforce code readability ([c2e6479](https://github.com/drmartinwimmer/review/commit/c2e647941e5d30b905050a0a1f9b8f0342133a3e))
+
 ## [0.2.0](https://github.com/drmartinwimmer/review/compare/code-review-check-v0.1.0...code-review-check-v0.2.0) (2026-10-06)
 
 

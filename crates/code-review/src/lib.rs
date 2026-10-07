@@ -140,9 +140,8 @@ impl Cli {
         match self.command.run_with_format(self.format) {
             Ok(()) => ExitCode::SUCCESS,
             Err(CodeReviewError::Check(CheckError::ViolationsFound { .. }))
-            | Err(CodeReviewError::Purist(PuristError::LintViolationsFound { .. })) => {
-                ExitCode::from(1)
-            }
+            | Err(CodeReviewError::Purist(PuristError::LintViolationsFound { .. }))
+            | Err(CodeReviewError::Api(ApiError::DriftDetected { .. })) => ExitCode::from(1),
             Err(err) => {
                 eprintln!("Error: {err}");
                 ExitCode::from(2)

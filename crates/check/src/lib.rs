@@ -1,12 +1,11 @@
-pub mod tools;
+mod tools;
 
 use clap::Args;
 use purist::{DiagnosticReport, OutputFormat, render_report};
 use std::path::{Path, PathBuf};
-pub use tools::{
-    AuditRunner, ClippyRunner, FmtRunner, JjError, JjVcs, JsonRunner, MarkdownRunner,
-    OpinionatedRunner, PuristRunner, TomlRunner, aggregate_diagnostics,
-    filter_diagnostics_by_changed_files,
+use tools::{
+    ApiRunner, AuditRunner, ClippyRunner, FmtRunner, JjError, JjVcs, JsonRunner, MarkdownRunner,
+    PuristRunner, TomlRunner, aggregate_diagnostics, filter_diagnostics_by_changed_files,
 };
 
 /// Severity threshold triggering non-zero exit code.
@@ -93,6 +92,10 @@ pub struct CheckCommand {
     #[arg(long)]
     skip_json: bool,
 
+    /// Skip running API manifest drift checks
+    #[arg(long)]
+    skip_api: bool,
+
     /// Silence non-essential logging output
     #[arg(short, long)]
     quiet: bool,
@@ -113,6 +116,7 @@ impl CheckCommand {
             skip_markdown: false,
             skip_toml: false,
             skip_json: false,
+            skip_api: false,
             quiet,
         }
     }
@@ -242,6 +246,17 @@ impl CheckCommand {
         !self.skip_json
     }
 
+    /// Enables or disables API manifest drift checks.
+    pub fn with_api(mut self, enabled: bool) -> Self {
+        self.skip_api = !enabled;
+        self
+    }
+
+    /// Returns whether API manifest drift checks are enabled.
+    pub fn is_api_enabled(&self) -> bool {
+        !self.skip_api
+    }
+
     /// Returns whether logging output is suppressed.
     pub fn is_quiet(&self) -> bool {
         self.quiet
@@ -304,7 +319,14 @@ impl CheckCommand {
             runner.run()?
         };
 
-        let aggregated = aggregate_diagnostics(
+        let api_diags = if self.skip_api {
+            Vec::new()
+        } else {
+            let runner = ApiRunner::new(target_dir);
+            runner.run()?
+        };
+
+        let mut all_diags = aggregate_diagnostics(
             fmt_diags,
             clippy_diags,
             purist_report,
@@ -312,7 +334,10 @@ impl CheckCommand {
             markdown_diags,
             toml_diags,
             json_diags,
-        );
+        )
+        .diagnostics;
+        all_diags.extend(api_diags);
+        let aggregated = DiagnosticReport::new(all_diags);
 
         if self.changed_only {
             let vcs = JjVcs::new(target_dir);

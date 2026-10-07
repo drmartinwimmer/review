@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -43,6 +42,9 @@ jobs:
       - name: Run purist AST linter
         run: cargo run -p code-review -- purist --path .
 
+      - name: Verify API manifests (API.md drift)
+        run: cargo run -p code-review -- api check
+
       - name: Check TOML formatting (Taplo)
         run: taplo fmt --check
 
@@ -54,7 +56,6 @@ jobs:
 
       - name: Run code-review check aggregator
         run: cargo run -p code-review -- check
-
       - name: Verify package & metadata
         run: |
           cargo metadata --format-version 1 --no-deps > /dev/null

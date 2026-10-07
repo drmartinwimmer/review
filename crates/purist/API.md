@@ -96,3 +96,49 @@ Fast purist AST linter for enforcing strict Rust code hygiene
 | `--format`      | `FORMAT` | No       | `-`     | Output format for reports and diagnostics        |
 | `--path`        | `PATH`   | No       | `-`     | Path to source files or crate directory          |
 | `-q`, `--quiet` | `-`      | No       | `-`     | Silence non-essential logging output             |
+
+## 3. Configuration Formats
+
+### `[lints.purist]` (_Cargo.toml_)
+
+Purist lint rule severity levels configured in Cargo.toml. Accepts 'allow', 'warn', 'deny', or 'forbid'.
+
+| Key                                     | Value Type                                | Default  | Description                                                  |
+| --------------------------------------- | ----------------------------------------- | -------- | ------------------------------------------------------------ |
+| `centralized_command_execution`         | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::centralized_command_execution         |
+| `clap_struct_encapsulation`             | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::clap_struct_encapsulation             |
+| `cli_run_consumes_self`                 | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::cli_run_consumes_self                 |
+| `clippy_suppression_hygiene`            | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::clippy_suppression_hygiene            |
+| `error_types`                           | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::error_types                           |
+| `exit_code_hygiene`                     | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::exit_code_hygiene                     |
+| `free_functions`                        | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::free_functions                        |
+| `googletest_conventions`                | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::googletest_conventions                |
+| `idiomatic_option_bool_mapping`         | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::idiomatic_option_bool_mapping         |
+| `max_file_lines`                        | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::max_file_lines                        |
+| `max_nesting_depth`                     | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::max_nesting_depth                     |
+| `no_boxed_dyn_error`                    | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::no_boxed_dyn_error                    |
+| `no_double_negation`                    | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::no_double_negation                    |
+| `no_env_access_outside_config`          | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::no_env_access_outside_config          |
+| `no_inline_mods`                        | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::no_inline_mods                        |
+| `no_println_in_libraries`               | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::no_println_in_libraries               |
+| `no_redundant_conversions`              | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::no_redundant_conversions              |
+| `no_redundant_wrappers`                 | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::no_redundant_wrappers                 |
+| `no_test_prefix`                        | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::no_test_prefix                        |
+| `no_trivial_getters_setters`            | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::no_trivial_getters_setters            |
+| `no_unsafe_in_tests`                    | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::no_unsafe_in_tests                    |
+| `no_wildcard_imports`                   | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::no_wildcard_imports                   |
+| `path_resolution`                       | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::path_resolution                       |
+| `raii_temp_directories`                 | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::raii_temp_directories                 |
+| `single_match_to_let_else`              | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::single_match_to_let_else              |
+| `test_matcher_borrow_simplification`    | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::test_matcher_borrow_simplification    |
+| `test_patterns`                         | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::test_patterns                         |
+| `use_declarations_over_qualified_paths` | `"allow" \| "warn" \| "deny" \| "forbid"` | `"warn"` | Rule level for purist::use_declarations_over_qualified_paths |
+
+### `[package.metadata.purist]` (_Cargo.toml_)
+
+Per-package threshold configurations for Purist static analysis rules.
+
+| Key                    | Value Type | Default | Description                                            |
+| ---------------------- | ---------- | ------- | ------------------------------------------------------ |
+| `max_production_lines` | `integer`  | `600`   | Maximum allowed production lines per source file       |
+| `max_total_lines`      | `integer`  | `1000`  | Maximum allowed total lines per file (including tests) |

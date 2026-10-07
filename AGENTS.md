@@ -47,8 +47,6 @@ Review agents must always run the Purist AST linter (`purist`) to identify and r
 
 ```bash
 cargo run -p code-review -- purist --path .
-# or directly:
-cargo run -p purist -- --path .
 ```
 
 Ensure zero violations (errors or warnings) are reported before submitting changes.

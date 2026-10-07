@@ -89,6 +89,10 @@ pub fn derives_any(attrs: &[Attribute], traits: &[&str]) -> bool {
 }
 
 /// Checks whether an attribute list derives the specified trait name.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "helper used by downstream config rules")
+)]
 pub fn derives_trait(attrs: &[Attribute], trait_name: &str) -> bool {
     derives_any(attrs, &[trait_name])
 }

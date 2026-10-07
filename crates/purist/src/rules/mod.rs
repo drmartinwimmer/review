@@ -3,6 +3,7 @@ pub mod clap_encapsulation;
 pub mod cli_run_consumes_self;
 pub mod clippy_suppress;
 pub mod common;
+pub mod config_struct_derive;
 pub mod error_types;
 pub mod exit_code_hygiene;
 pub mod free_functions;
@@ -32,6 +33,7 @@ pub use centralized_commands::CentralizedCommandsRule;
 pub use clap_encapsulation::ClapEncapsulationRule;
 pub use cli_run_consumes_self::CliRunConsumesSelfRule;
 pub use clippy_suppress::ClippySuppressRule;
+pub use config_struct_derive::ConfigStructDeriveRule;
 pub use error_types::ErrorTypesRule;
 pub use exit_code_hygiene::ExitCodeHygieneRule;
 pub use free_functions::FreeFunctionsRule;
@@ -90,5 +92,6 @@ pub fn default_rules() -> Vec<Box<dyn Rule>> {
         Box::new(MaxFileLinesRule),
         Box::new(NoTrivialGettersSettersRule),
         Box::new(MaxNestingDepthRule),
+        Box::new(ConfigStructDeriveRule),
     ]
 }

@@ -1,9 +1,10 @@
 use clap::{Parser, Subcommand};
 use code_review_api::{ApiCommand, ApiError};
-use code_review_check::{CheckCommand, CheckError};
-use code_review_configure_lints::{CargoTomlError, ConfigureLintsCommand};
-use code_review_coverage::{CoverageCommand, CoverageError};
-use purist::{OutputFormat, PuristCommand, PuristError};
+use code_review_check::{self, CheckError, CheckOptions, FailOn};
+use code_review_configure_lints::{self, CargoTomlError, ConfigureLintsOptions, LintProfile};
+use code_review_coverage::{self, CoverageError, CoverageOptions};
+use purist::{self, OutputFormat, PuristError, PuristOptions};
+use std::path::PathBuf;
 use std::process::ExitCode;
 use thiserror::Error;
 
@@ -31,25 +32,208 @@ pub enum CodeReviewError {
     Coverage(#[from] CoverageError),
 }
 
+/// Arguments for the check aggregator subcommand.
+#[derive(clap::Args, Debug, Clone, Default, PartialEq, Eq)]
+pub struct CheckArgs {
+    /// Path to target workspace or crate directory
+    #[arg(long)]
+    path: Option<PathBuf>,
+
+    /// Output format for reports and diagnostics
+    #[arg(long, value_enum)]
+    format: Option<OutputFormat>,
+
+    /// Severity threshold triggering non-zero exit code
+    #[arg(long, value_enum, default_value_t = FailOn::Warnings)]
+    fail_on: FailOn,
+
+    /// Filter diagnostics to only files modified in Jujutsu working copy
+    #[arg(long)]
+    changed_only: bool,
+
+    /// Skip running cargo fmt
+    #[arg(long)]
+    skip_fmt: bool,
+
+    /// Skip running cargo clippy
+    #[arg(long)]
+    skip_clippy: bool,
+
+    /// Skip running purist AST linter
+    #[arg(long, alias = "skip-opinionated")]
+    skip_purist: bool,
+
+    /// Skip running cargo audit
+    #[arg(long)]
+    skip_audit: bool,
+
+    /// Skip running markdown format/lint checks
+    #[arg(long)]
+    skip_markdown: bool,
+
+    /// Skip running TOML format/lint checks
+    #[arg(long)]
+    skip_toml: bool,
+
+    /// Skip running JSON format/lint checks
+    #[arg(long)]
+    skip_json: bool,
+
+    /// Silence non-essential logging output
+    #[arg(short, long)]
+    quiet: bool,
+}
+
+impl CheckArgs {
+    /// Converts arguments to domain `CheckOptions`.
+    pub fn into_options(self, fallback_format: OutputFormat) -> CheckOptions {
+        CheckOptions {
+            path: self.path,
+            format: Some(self.format.unwrap_or(fallback_format)),
+            fail_on: self.fail_on,
+            changed_only: self.changed_only,
+            skip_fmt: self.skip_fmt,
+            skip_clippy: self.skip_clippy,
+            skip_purist: self.skip_purist,
+            skip_audit: self.skip_audit,
+            skip_markdown: self.skip_markdown,
+            skip_toml: self.skip_toml,
+            skip_json: self.skip_json,
+            quiet: self.quiet,
+        }
+    }
+
+    /// Executes the check subcommand.
+    pub fn run(self, format: OutputFormat) -> Result<(), CheckError> {
+        let options = self.into_options(format);
+        code_review_check::run(&options)
+    }
+}
+
+/// Arguments for the configure-lints subcommand.
+#[derive(clap::Args, Debug, Clone, Default, PartialEq, Eq)]
+pub struct ConfigureLintsArgs {
+    /// Path to the Cargo.toml manifest to configure
+    #[arg(long, default_value = "Cargo.toml")]
+    manifest_path: PathBuf,
+
+    /// Lint profile preset to inject (strict or standard)
+    #[arg(long, value_enum, default_value_t = LintProfile::Strict)]
+    profile: LintProfile,
+
+    /// Remove configured lints instead of injecting them
+    #[arg(long)]
+    remove: bool,
+
+    /// Silence non-essential logging output
+    #[arg(short, long)]
+    quiet: bool,
+}
+
+impl ConfigureLintsArgs {
+    /// Converts arguments to domain `ConfigureLintsOptions`.
+    pub fn into_options(self) -> ConfigureLintsOptions {
+        ConfigureLintsOptions {
+            manifest_path: self.manifest_path,
+            profile: self.profile,
+            remove: self.remove,
+            quiet: self.quiet,
+        }
+    }
+
+    /// Executes the configure-lints subcommand.
+    pub fn run(self) -> Result<(), CargoTomlError> {
+        let options = self.into_options();
+        let _ = code_review_configure_lints::run(&options)?;
+        Ok(())
+    }
+}
+
+/// Arguments for the purist linter subcommand.
+#[derive(clap::Args, Debug, Clone, Default, PartialEq, Eq)]
+pub struct PuristArgs {
+    /// Path to source files or crate directory
+    #[arg(long)]
+    path: Option<PathBuf>,
+
+    /// Output format for reports and diagnostics
+    #[arg(long, value_enum)]
+    format: Option<OutputFormat>,
+
+    /// Automatically apply fixes where supported (stub)
+    #[arg(long)]
+    fix: bool,
+
+    /// Silence non-essential logging output
+    #[arg(short, long)]
+    quiet: bool,
+}
+
+impl PuristArgs {
+    /// Converts arguments to domain `PuristOptions`.
+    pub fn into_options(self, fallback_format: OutputFormat) -> PuristOptions {
+        PuristOptions {
+            path: self.path,
+            format: Some(self.format.unwrap_or(fallback_format)),
+            fix: self.fix,
+            quiet: self.quiet,
+        }
+    }
+
+    /// Executes the purist subcommand.
+    pub fn run(self, format: OutputFormat) -> Result<(), PuristError> {
+        let options = self.into_options(format);
+        purist::run(&options)
+    }
+}
+
+/// Arguments for the coverage subcommand.
+#[derive(clap::Args, Debug, Clone, Default, PartialEq)]
+pub struct CoverageArgs {
+    /// Minimum coverage threshold percentage
+    #[arg(long)]
+    threshold: Option<f64>,
+
+    /// Silence non-essential logging output
+    #[arg(short, long)]
+    quiet: bool,
+}
+
+impl CoverageArgs {
+    /// Converts arguments to domain `CoverageOptions`.
+    pub fn into_options(self) -> CoverageOptions {
+        CoverageOptions {
+            threshold: self.threshold,
+            quiet: self.quiet,
+        }
+    }
+
+    /// Executes the coverage subcommand.
+    pub fn run(self) -> Result<(), CoverageError> {
+        let options = self.into_options();
+        code_review_coverage::run(&options)
+    }
+}
+
 /// Subcommands supported by the code-review CLI toolkit.
 #[derive(Debug, Subcommand, PartialEq)]
 pub enum Commands {
     /// Aggregates formatters, clippy, purist, audit, and coverage checks
-    Check(CheckCommand),
+    Check(CheckArgs),
 
     /// Configure or remove strict Clippy lints in Cargo.toml
     #[command(name = "configure-lints")]
-    ConfigureLints(ConfigureLintsCommand),
+    ConfigureLints(ConfigureLintsArgs),
 
     /// Run AST-based purist linter rules
     #[command(alias = "opinionated")]
-    Purist(PuristCommand),
+    Purist(PuristArgs),
 
     /// Introspect and detect public API drift against API.md
     Api(ApiCommand),
 
     /// Run LLVM source-based coverage gates
-    Coverage(CoverageCommand),
+    Coverage(CoverageArgs),
 }
 
 impl Commands {
@@ -61,21 +245,11 @@ impl Commands {
     /// Executes the subcommand with the specified report output format.
     pub fn run_with_format(self, format: OutputFormat) -> Result<(), CodeReviewError> {
         match self {
-            Self::ConfigureLints(cmd) => Ok(cmd.run()?),
-            Self::Check(mut cmd) => {
-                if cmd.format().is_none() {
-                    cmd = cmd.with_format(format);
-                }
-                Ok(cmd.run()?)
-            }
-            Self::Purist(mut cmd) => {
-                if cmd.format().is_none() {
-                    cmd = cmd.with_format(format);
-                }
-                Ok(cmd.run()?)
-            }
+            Self::ConfigureLints(args) => Ok(args.run()?),
+            Self::Check(args) => Ok(args.run(format)?),
+            Self::Purist(args) => Ok(args.run(format)?),
             Self::Api(cmd) => Ok(cmd.run()?),
-            Self::Coverage(cmd) => Ok(cmd.run()?),
+            Self::Coverage(args) => Ok(args.run()?),
         }
     }
 }
@@ -166,12 +340,11 @@ mod tests {
         expect_that!(cli.format(), eq(OutputFormat::Console));
         expect_that!(cli.verbose(), eq(0));
         expect_that!(cli.is_quiet(), is_false());
-        expect_that!(
-            cli.command(),
-            eq(&Commands::Check(
-                CheckCommand::default().with_format(OutputFormat::Console)
-            ))
-        );
+        let expected = CheckArgs {
+            format: Some(OutputFormat::Console),
+            ..Default::default()
+        };
+        expect_that!(cli.command(), eq(&Commands::Check(expected)));
         Ok(())
     }
 
@@ -194,10 +367,11 @@ mod tests {
         let args = ["code-review", "configure-lints"];
         let cli = Cli::try_parse_from(args)?;
         match cli.command() {
-            Commands::ConfigureLints(cmd) => {
-                expect_that!(cmd.manifest_path(), eq(&PathBuf::from("Cargo.toml")));
-                expect_that!(cmd.profile(), eq(LintProfile::Strict));
-                expect_that!(cmd.is_remove(), is_false());
+            Commands::ConfigureLints(args) => {
+                let opts = args.clone().into_options();
+                expect_that!(&opts.manifest_path, eq(&PathBuf::from("Cargo.toml")));
+                expect_that!(opts.profile, eq(LintProfile::Strict));
+                expect_that!(opts.remove, is_false());
             }
             _ => return Err("Expected ConfigureLints subcommand".into()),
         }
@@ -219,14 +393,15 @@ mod tests {
         ];
         let cli = Cli::try_parse_from(args)?;
         match cli.command() {
-            Commands::ConfigureLints(cmd) => {
+            Commands::ConfigureLints(args) => {
+                let opts = args.clone().into_options();
                 expect_that!(
-                    cmd.manifest_path(),
+                    &opts.manifest_path,
                     eq(&PathBuf::from("crates/demo/Cargo.toml"))
                 );
-                expect_that!(cmd.profile(), eq(LintProfile::Standard));
-                expect_that!(cmd.is_remove(), is_true());
-                expect_that!(cmd.is_quiet(), is_true());
+                expect_that!(opts.profile, eq(LintProfile::Standard));
+                expect_that!(opts.remove, is_true());
+                expect_that!(opts.quiet, is_true());
             }
             _ => return Err("Expected ConfigureLints subcommand".into()),
         }
@@ -263,15 +438,21 @@ mod tests {
 
     #[googletest::test]
     fn run_cli_check_command_returns_success() {
-        let cmd = CheckCommand::new(None, true)
-            .with_fmt(false)
-            .with_clippy(false)
-            .with_purist(false)
-            .with_audit(false)
-            .with_markdown(false)
-            .with_toml(false)
-            .with_json(false);
-        let cli = Cli::new(OutputFormat::Console, 0, true, Commands::Check(cmd));
+        let args = CheckArgs {
+            path: None,
+            format: None,
+            fail_on: FailOn::Warnings,
+            changed_only: false,
+            skip_fmt: true,
+            skip_clippy: true,
+            skip_purist: true,
+            skip_audit: true,
+            skip_markdown: true,
+            skip_toml: true,
+            skip_json: true,
+            quiet: true,
+        };
+        let cli = Cli::new(OutputFormat::Console, 0, true, Commands::Check(args));
         expect_that!(cli.run(), eq(ExitCode::SUCCESS));
     }
 
@@ -299,19 +480,22 @@ mod tests {
         let cli = Cli::try_parse_from(args)?;
         expect_that!(cli.format(), eq(OutputFormat::Json));
         match cli.command() {
-            Commands::Check(cmd) => {
-                expect_that!(cmd.path(), eq(Some(Path::new("crates/check"))));
-                expect_that!(cmd.fail_on(), eq(code_review_check::FailOn::Errors));
-                expect_that!(cmd.is_changed_only(), is_true());
-                expect_that!(cmd.is_fmt_enabled(), is_false());
-                expect_that!(cmd.is_clippy_enabled(), is_false());
-                expect_that!(cmd.is_purist_enabled(), is_false());
-                expect_that!(cmd.is_opinionated_enabled(), is_false());
-                expect_that!(cmd.is_audit_enabled(), is_false());
-                expect_that!(cmd.is_markdown_enabled(), is_false());
-                expect_that!(cmd.is_toml_enabled(), is_false());
-                expect_that!(cmd.is_json_enabled(), is_false());
-                expect_that!(cmd.is_quiet(), is_true());
+            Commands::Check(args) => {
+                let opts = args.clone().into_options(OutputFormat::Json);
+                expect_that!(
+                    &opts.path,
+                    eq(&Some(Path::new("crates/check").to_path_buf()))
+                );
+                expect_that!(opts.fail_on, eq(FailOn::Errors));
+                expect_that!(opts.changed_only, is_true());
+                expect_that!(opts.skip_fmt, is_true());
+                expect_that!(opts.skip_clippy, is_true());
+                expect_that!(opts.skip_purist, is_true());
+                expect_that!(opts.skip_audit, is_true());
+                expect_that!(opts.skip_markdown, is_true());
+                expect_that!(opts.skip_toml, is_true());
+                expect_that!(opts.skip_json, is_true());
+                expect_that!(opts.quiet, is_true());
             }
             _ => return Err("Expected Check subcommand".into()),
         }
@@ -324,9 +508,9 @@ mod tests {
         let args = ["code-review", "check", "--skip-opinionated"];
         let cli = Cli::try_parse_from(args)?;
         match cli.command() {
-            Commands::Check(cmd) => {
-                expect_that!(cmd.is_purist_enabled(), is_false());
-                expect_that!(cmd.is_opinionated_enabled(), is_false());
+            Commands::Check(args) => {
+                let opts = args.clone().into_options(OutputFormat::Console);
+                expect_that!(opts.skip_purist, is_true());
             }
             _ => return Err("Expected Check subcommand".into()),
         }
@@ -348,13 +532,16 @@ mod tests {
         let cli = Cli::try_parse_from(args)?;
         expect_that!(cli.format(), eq(OutputFormat::Json));
         match cli.command() {
-            Commands::Purist(cmd) => {
+            Commands::Purist(args) => {
+                let opts = args.clone().into_options(OutputFormat::Json);
                 expect_that!(
-                    cmd.path(),
-                    eq(Some(std::path::Path::new("crates/purist/src")))
+                    &opts.path,
+                    eq(&Some(
+                        std::path::Path::new("crates/purist/src").to_path_buf()
+                    ))
                 );
-                expect_that!(cmd.is_fix(), is_true());
-                expect_that!(cmd.is_quiet(), is_true());
+                expect_that!(opts.fix, is_true());
+                expect_that!(opts.quiet, is_true());
             }
             _ => return Err("Expected Purist subcommand".into()),
         }
@@ -381,8 +568,13 @@ mod tests {
         let file_path = temp_dir.join("clean.rs");
         std::fs::write(&file_path, "pub fn helper() -> i32 { 10 }\n")?;
 
-        let cmd = PuristCommand::new(Some(file_path), true);
-        let cli = Cli::new(OutputFormat::Console, 0, true, Commands::Purist(cmd));
+        let args = PuristArgs {
+            path: Some(file_path),
+            format: None,
+            fix: false,
+            quiet: true,
+        };
+        let cli = Cli::new(OutputFormat::Console, 0, true, Commands::Purist(args));
         let code = cli.run();
 
         expect_that!(code, eq(ExitCode::SUCCESS));
@@ -401,8 +593,13 @@ mod tests {
         let file_path = temp_dir.join("main.rs");
         std::fs::write(&file_path, "mod helpers { pub fn broken() {} }\n")?;
 
-        let cmd = PuristCommand::new(Some(file_path), true);
-        let cli = Cli::new(OutputFormat::Console, 0, true, Commands::Purist(cmd));
+        let args = PuristArgs {
+            path: Some(file_path),
+            format: None,
+            fix: false,
+            quiet: true,
+        };
+        let cli = Cli::new(OutputFormat::Console, 0, true, Commands::Purist(args));
         let code = cli.run();
 
         expect_that!(code, eq(ExitCode::from(1)));

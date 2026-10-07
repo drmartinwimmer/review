@@ -1,5 +1,6 @@
 use clap::Parser;
-use purist::{PuristCommand, PuristError};
+use purist::{OutputFormat, PuristError, PuristOptions};
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 #[derive(Parser, Debug)]
@@ -9,13 +10,36 @@ use std::process::ExitCode;
     version
 )]
 struct Cli {
-    #[command(flatten)]
-    cmd: PuristCommand,
+    /// Path to source files or crate directory
+    #[arg(long)]
+    path: Option<PathBuf>,
+
+    /// Output format for reports and diagnostics
+    #[arg(long, value_enum)]
+    format: Option<OutputFormat>,
+
+    /// Automatically apply fixes where supported (stub)
+    #[arg(long)]
+    fix: bool,
+
+    /// Silence non-essential logging output
+    #[arg(short, long)]
+    quiet: bool,
 }
 
 impl Cli {
+    fn to_options(&self) -> PuristOptions {
+        PuristOptions {
+            path: self.path.clone(),
+            format: self.format,
+            fix: self.fix,
+            quiet: self.quiet,
+        }
+    }
+
     fn run(self) -> ExitCode {
-        match self.cmd.run() {
+        let opts = self.to_options();
+        match purist::run(&opts) {
             Ok(()) => ExitCode::SUCCESS,
             Err(PuristError::LintViolationsFound { .. }) => ExitCode::from(1),
             Err(err) => {
@@ -55,7 +79,10 @@ mod tests {
         fs::write(&file_path, "pub fn add(x: i32) -> i32 { x + 1 }\n")?;
 
         let cli = Cli {
-            cmd: PuristCommand::new(Some(file_path), true),
+            path: Some(file_path),
+            format: None,
+            fix: false,
+            quiet: true,
         };
         let code = cli.run();
 
@@ -72,7 +99,10 @@ mod tests {
         fs::write(&file_path, "mod helpers { pub fn foo() {} }\n")?;
 
         let cli = Cli {
-            cmd: PuristCommand::new(Some(file_path), true),
+            path: Some(file_path),
+            format: None,
+            fix: false,
+            quiet: true,
         };
         let code = cli.run();
 
@@ -84,7 +114,10 @@ mod tests {
     fn run_cli_with_nonexistent_path_returns_exit_code_2() -> Result<(), Box<dyn std::error::Error>>
     {
         let cli = Cli {
-            cmd: PuristCommand::new(Some(PathBuf::from("nonexistent_path_404.rs")), true),
+            path: Some(PathBuf::from("nonexistent_path_404.rs")),
+            format: None,
+            fix: false,
+            quiet: true,
         };
         let code = cli.run();
         assert_that!(code, eq(ExitCode::from(2)));

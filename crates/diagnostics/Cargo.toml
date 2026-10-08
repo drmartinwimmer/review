@@ -8,16 +8,7 @@ description = "Diagnostic representation and multi-format reporting engine for c
 publish = false
 
 [dependencies]
-annotate-snippets = { workspace = true }
-anstyle = { workspace = true }
-anstyle-query = { workspace = true }
-clap = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
 purist = { workspace = true }
-
-[dev-dependencies]
-googletest = { workspace = true }
 
 [lints]
 workspace = true

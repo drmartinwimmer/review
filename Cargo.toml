@@ -78,4 +78,3 @@ allow_attributes_without_reason = "warn"
 
 [workspace.metadata.purist.lints]
 no_negative_bool = "allow"
-lib_facade_hygiene = "allow"

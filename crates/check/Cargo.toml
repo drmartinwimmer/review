@@ -27,4 +27,3 @@ workspace = true
 
 [package.metadata.purist.lints]
 no_negative_bool = "allow"
-lib_facade_hygiene = "allow"

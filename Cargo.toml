@@ -75,6 +75,3 @@ dbg_macro = "warn"
 # a deliberate #[expect(..., reason = "…")] rather than a silent #[allow]
 allow_attributes = "warn"
 allow_attributes_without_reason = "warn"
-
-[workspace.metadata.purist.lints]
-no_negative_bool = "allow"

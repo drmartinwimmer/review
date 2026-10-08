@@ -24,6 +24,3 @@ googletest = { workspace = true }
 
 [lints]
 workspace = true
-
-[package.metadata.purist.lints]
-no_negative_bool = "allow"

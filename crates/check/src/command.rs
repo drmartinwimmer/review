@@ -44,7 +44,7 @@ pub enum CheckError {
 }
 
 /// Arguments for the check aggregator subcommand.
-#[derive(Args, Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Args, Debug, Clone, PartialEq, Eq)]
 pub struct CheckCommand {
     /// Path to target workspace or crate directory
     #[arg(long)]
@@ -62,37 +62,99 @@ pub struct CheckCommand {
     #[arg(long)]
     changed_only: bool,
 
-    /// Skip running cargo fmt
-    #[arg(long)]
-    skip_fmt: bool,
+    /// Run cargo fmt checks (enabled by default; set to false to skip)
+    #[arg(
+        long,
+        default_value_t = true,
+        action = clap::ArgAction::Set,
+        num_args(0..=1),
+        default_missing_value = "true"
+    )]
+    fmt: bool,
 
-    /// Skip running cargo clippy
-    #[arg(long)]
-    skip_clippy: bool,
+    /// Run cargo clippy checks (enabled by default; set to false to skip)
+    #[arg(
+        long,
+        default_value_t = true,
+        action = clap::ArgAction::Set,
+        num_args(0..=1),
+        default_missing_value = "true"
+    )]
+    clippy: bool,
 
-    /// Skip running purist AST linter
-    #[arg(long, alias = "skip-opinionated")]
-    skip_purist: bool,
+    /// Run purist AST linter checks (enabled by default; set to false to skip)
+    #[arg(
+        long,
+        alias = "opinionated",
+        default_value_t = true,
+        action = clap::ArgAction::Set,
+        num_args(0..=1),
+        default_missing_value = "true"
+    )]
+    purist: bool,
 
-    /// Skip running cargo audit
-    #[arg(long)]
-    skip_audit: bool,
+    /// Run cargo audit dependency security scan (enabled by default; set to false to skip)
+    #[arg(
+        long,
+        default_value_t = true,
+        action = clap::ArgAction::Set,
+        num_args(0..=1),
+        default_missing_value = "true"
+    )]
+    audit: bool,
 
-    /// Skip running markdown format/lint checks
-    #[arg(long)]
-    skip_markdown: bool,
+    /// Run markdown format/lint checks (enabled by default; set to false to skip)
+    #[arg(
+        long,
+        default_value_t = true,
+        action = clap::ArgAction::Set,
+        num_args(0..=1),
+        default_missing_value = "true"
+    )]
+    markdown: bool,
 
-    /// Skip running TOML format/lint checks
-    #[arg(long)]
-    skip_toml: bool,
+    /// Run TOML format/lint checks (enabled by default; set to false to skip)
+    #[arg(
+        long,
+        default_value_t = true,
+        action = clap::ArgAction::Set,
+        num_args(0..=1),
+        default_missing_value = "true"
+    )]
+    toml: bool,
 
-    /// Skip running JSON format/lint checks
-    #[arg(long)]
-    skip_json: bool,
+    /// Run JSON format/lint checks (enabled by default; set to false to skip)
+    #[arg(
+        long,
+        default_value_t = true,
+        action = clap::ArgAction::Set,
+        num_args(0..=1),
+        default_missing_value = "true"
+    )]
+    json: bool,
 
     /// Silence non-essential logging output
     #[arg(short, long)]
     quiet: bool,
+}
+
+impl Default for CheckCommand {
+    fn default() -> Self {
+        Self {
+            path: None,
+            format: None,
+            fail_on: FailOn::Warnings,
+            changed_only: false,
+            fmt: true,
+            clippy: true,
+            purist: true,
+            audit: true,
+            markdown: true,
+            toml: true,
+            json: true,
+            quiet: false,
+        }
+    }
 }
 
 impl CheckCommand {
@@ -100,17 +162,8 @@ impl CheckCommand {
     pub fn new(path: Option<PathBuf>, quiet: bool) -> Self {
         Self {
             path,
-            format: None,
-            fail_on: FailOn::Warnings,
-            changed_only: false,
-            skip_fmt: false,
-            skip_clippy: false,
-            skip_purist: false,
-            skip_audit: false,
-            skip_markdown: false,
-            skip_toml: false,
-            skip_json: false,
             quiet,
+            ..Default::default()
         }
     }
 
@@ -134,19 +187,19 @@ impl CheckCommand {
 
     /// Enables or disables cargo fmt checks.
     pub fn with_fmt(mut self, enabled: bool) -> Self {
-        self.skip_fmt = !enabled;
+        self.fmt = enabled;
         self
     }
 
     /// Enables or disables cargo clippy checks.
     pub fn with_clippy(mut self, enabled: bool) -> Self {
-        self.skip_clippy = !enabled;
+        self.clippy = enabled;
         self
     }
 
     /// Enables or disables purist AST linter checks.
     pub fn with_purist(mut self, enabled: bool) -> Self {
-        self.skip_purist = !enabled;
+        self.purist = enabled;
         self
     }
 
@@ -157,25 +210,25 @@ impl CheckCommand {
 
     /// Enables or disables cargo audit dependency security scan.
     pub fn with_audit(mut self, enabled: bool) -> Self {
-        self.skip_audit = !enabled;
+        self.audit = enabled;
         self
     }
 
     /// Enables or disables markdown format/lint checks.
     pub fn with_markdown(mut self, enabled: bool) -> Self {
-        self.skip_markdown = !enabled;
+        self.markdown = enabled;
         self
     }
 
     /// Enables or disables TOML format/lint checks.
     pub fn with_toml(mut self, enabled: bool) -> Self {
-        self.skip_toml = !enabled;
+        self.toml = enabled;
         self
     }
 
     /// Enables or disables JSON format/lint checks.
     pub fn with_json(mut self, enabled: bool) -> Self {
-        self.skip_json = !enabled;
+        self.json = enabled;
         self
     }
 
@@ -201,42 +254,42 @@ impl CheckCommand {
 
     /// Returns whether cargo fmt is enabled.
     pub fn is_fmt_enabled(&self) -> bool {
-        !self.skip_fmt
+        self.fmt
     }
 
     /// Returns whether cargo clippy is enabled.
     pub fn is_clippy_enabled(&self) -> bool {
-        !self.skip_clippy
+        self.clippy
     }
 
     /// Returns whether purist AST linter is enabled.
     pub fn is_purist_enabled(&self) -> bool {
-        !self.skip_purist
+        self.purist
     }
 
     /// Backwards compatibility alias for `is_purist_enabled`.
     pub fn is_opinionated_enabled(&self) -> bool {
-        !self.skip_purist
+        self.purist
     }
 
     /// Returns whether cargo audit is enabled.
     pub fn is_audit_enabled(&self) -> bool {
-        !self.skip_audit
+        self.audit
     }
 
     /// Returns whether markdown checks are enabled.
     pub fn is_markdown_enabled(&self) -> bool {
-        !self.skip_markdown
+        self.markdown
     }
 
     /// Returns whether TOML checks are enabled.
     pub fn is_toml_enabled(&self) -> bool {
-        !self.skip_toml
+        self.toml
     }
 
     /// Returns whether JSON checks are enabled.
     pub fn is_json_enabled(&self) -> bool {
-        !self.skip_json
+        self.json
     }
 
     /// Returns whether logging output is suppressed.
@@ -252,49 +305,49 @@ impl CheckCommand {
             return Err(CheckError::PathNotFound(target_dir.to_path_buf()));
         }
 
-        let fmt_diags = if self.skip_fmt {
+        let fmt_diags = if !self.fmt {
             Vec::new()
         } else {
             let runner = FmtRunner::new(target_dir);
             runner.run()?
         };
 
-        let clippy_diags = if self.skip_clippy {
+        let clippy_diags = if !self.clippy {
             Vec::new()
         } else {
             let runner = ClippyRunner::new(target_dir);
             runner.run()?
         };
 
-        let purist_report = if self.skip_purist {
+        let purist_report = if !self.purist {
             DiagnosticReport::default()
         } else {
             let runner = PuristRunner::new(target_dir);
             runner.run()?
         };
 
-        let audit_diags = if self.skip_audit {
+        let audit_diags = if !self.audit {
             Vec::new()
         } else {
             let runner = AuditRunner::new(target_dir);
             runner.run()?
         };
 
-        let markdown_diags = if self.skip_markdown {
+        let markdown_diags = if !self.markdown {
             Vec::new()
         } else {
             let runner = MarkdownRunner::new(target_dir);
             runner.run()?
         };
 
-        let toml_diags = if self.skip_toml {
+        let toml_diags = if !self.toml {
             Vec::new()
         } else {
             let runner = TomlRunner::new(target_dir);
             runner.run()?
         };
 
-        let json_diags = if self.skip_json {
+        let json_diags = if !self.json {
             Vec::new()
         } else {
             let runner = JsonRunner::new(target_dir);

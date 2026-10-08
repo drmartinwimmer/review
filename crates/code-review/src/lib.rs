@@ -341,7 +341,7 @@ mod tests {
             "json",
             "purist",
             "--path",
-            "crates/purist/src",
+            "crates/check/src",
             "--fix",
             "--quiet",
         ];
@@ -351,7 +351,7 @@ mod tests {
             Commands::Purist(cmd) => {
                 expect_that!(
                     cmd.path(),
-                    eq(Some(std::path::Path::new("crates/purist/src")))
+                    eq(Some(std::path::Path::new("crates/check/src")))
                 );
                 expect_that!(cmd.is_fix(), is_true());
                 expect_that!(cmd.is_quiet(), is_true());

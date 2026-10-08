@@ -127,7 +127,6 @@ dependencies = [
  "code-review-check",
  "code-review-configure-lints",
  "code-review-coverage",
- "code-review-diagnostics",
  "googletest",
  "purist",
  "thiserror",
@@ -179,14 +178,7 @@ dependencies = [
 name = "code-review-diagnostics"
 version = "0.1.0"
 dependencies = [
- "annotate-snippets",
- "anstyle",
- "anstyle-query",
- "clap",
- "googletest",
  "purist",
- "serde",
- "serde_json",
 ]
 
 [[package]]

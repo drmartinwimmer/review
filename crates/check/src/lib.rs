@@ -1,5 +1,5 @@
-pub mod command;
-pub mod tools;
+mod command;
+mod tools;
 
 pub use command::{CheckCommand, CheckError, FailOn};
 pub use tools::{

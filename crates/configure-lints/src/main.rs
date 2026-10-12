@@ -32,7 +32,7 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use code_review_configure_lints::cargo_toml::LintProfile;
+    use code_review_configure_lints::LintProfile;
     use googletest::prelude::*;
     use std::fs;
     use std::path::PathBuf;

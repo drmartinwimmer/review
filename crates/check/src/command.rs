@@ -2,7 +2,6 @@ use crate::tools::{
     AuditRunner, ClippyRunner, FmtRunner, JjError, JjVcs, JsonRunner, MarkdownRunner, PuristRunner,
     TomlRunner, aggregate_diagnostics, filter_diagnostics_by_changed_files,
 };
-use clap::Args;
 use purist::{DiagnosticReport, OutputFormat, render_report};
 use std::path::{Path, PathBuf};
 
@@ -43,102 +42,47 @@ pub enum CheckError {
     ViolationsFound { count: usize },
 }
 
-/// Arguments for the check aggregator subcommand.
-#[derive(Args, Debug, Clone, PartialEq, Eq)]
-pub struct CheckCommand {
-    /// Path to target workspace or crate directory
-    #[arg(long)]
-    path: Option<PathBuf>,
+/// Execution options for running check aggregator checks.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckOptions {
+    /// Path to target workspace or crate directory.
+    pub path: Option<PathBuf>,
 
-    /// Output format for reports and diagnostics
-    #[arg(long, value_enum)]
-    format: Option<OutputFormat>,
+    /// Output format for reports and diagnostics.
+    pub format: Option<OutputFormat>,
 
-    /// Severity threshold triggering non-zero exit code
-    #[arg(long, value_enum, default_value_t = FailOn::Warnings)]
-    fail_on: FailOn,
+    /// Severity threshold triggering non-zero exit code.
+    pub fail_on: FailOn,
 
-    /// Filter diagnostics to only files modified in Jujutsu working copy
-    #[arg(long)]
-    changed_only: bool,
+    /// Filter diagnostics to only files modified in Jujutsu working copy.
+    pub changed_only: bool,
 
-    /// Run cargo fmt checks (enabled by default; set to false to skip)
-    #[arg(
-        long,
-        default_value_t = true,
-        action = clap::ArgAction::Set,
-        num_args(0..=1),
-        default_missing_value = "true"
-    )]
-    fmt: bool,
+    /// Run cargo fmt checks (enabled by default).
+    pub fmt: bool,
 
-    /// Run cargo clippy checks (enabled by default; set to false to skip)
-    #[arg(
-        long,
-        default_value_t = true,
-        action = clap::ArgAction::Set,
-        num_args(0..=1),
-        default_missing_value = "true"
-    )]
-    clippy: bool,
+    /// Run cargo clippy checks (enabled by default).
+    pub clippy: bool,
 
-    /// Run purist AST linter checks (enabled by default; set to false to skip)
-    #[arg(
-        long,
-        alias = "opinionated",
-        default_value_t = true,
-        action = clap::ArgAction::Set,
-        num_args(0..=1),
-        default_missing_value = "true"
-    )]
-    purist: bool,
+    /// Run purist AST linter checks (enabled by default).
+    pub purist: bool,
 
-    /// Run cargo audit dependency security scan (enabled by default; set to false to skip)
-    #[arg(
-        long,
-        default_value_t = true,
-        action = clap::ArgAction::Set,
-        num_args(0..=1),
-        default_missing_value = "true"
-    )]
-    audit: bool,
+    /// Run cargo audit dependency security scan (enabled by default).
+    pub audit: bool,
 
-    /// Run markdown format/lint checks (enabled by default; set to false to skip)
-    #[arg(
-        long,
-        default_value_t = true,
-        action = clap::ArgAction::Set,
-        num_args(0..=1),
-        default_missing_value = "true"
-    )]
-    markdown: bool,
+    /// Run markdown format/lint checks (enabled by default).
+    pub markdown: bool,
 
-    /// Run TOML format/lint checks (enabled by default; set to false to skip)
-    #[arg(
-        long,
-        default_value_t = true,
-        action = clap::ArgAction::Set,
-        num_args(0..=1),
-        default_missing_value = "true"
-    )]
-    toml: bool,
+    /// Run TOML format/lint checks (enabled by default).
+    pub toml: bool,
 
-    /// Run JSON format/lint checks (enabled by default; set to false to skip)
-    #[arg(
-        long,
-        default_value_t = true,
-        action = clap::ArgAction::Set,
-        num_args(0..=1),
-        default_missing_value = "true"
-    )]
-    json: bool,
+    /// Run JSON format/lint checks (enabled by default).
+    pub json: bool,
 
-    /// Silence non-essential logging output
-    #[arg(short, long)]
-    quiet: bool,
+    /// Silence non-essential logging output.
+    pub quiet: bool,
 }
 
-impl Default for CheckCommand {
+impl Default for CheckOptions {
     fn default() -> Self {
         Self {
             path: None,
@@ -157,8 +101,8 @@ impl Default for CheckCommand {
     }
 }
 
-impl CheckCommand {
-    /// Creates a new `CheckCommand` instance with default options.
+impl CheckOptions {
+    /// Creates a new `CheckOptions` instance with default options.
     pub fn new(path: Option<PathBuf>, quiet: bool) -> Self {
         Self {
             path,
@@ -167,238 +111,118 @@ impl CheckCommand {
         }
     }
 
-    /// Sets the output format.
-    pub fn with_format(mut self, format: OutputFormat) -> Self {
-        self.format = Some(format);
-        self
-    }
-
-    /// Sets the failure threshold.
-    pub fn with_fail_on(mut self, fail_on: FailOn) -> Self {
-        self.fail_on = fail_on;
-        self
-    }
-
-    /// Sets changed-only filtering.
-    pub fn with_changed_only(mut self, changed_only: bool) -> Self {
-        self.changed_only = changed_only;
-        self
-    }
-
-    /// Enables or disables cargo fmt checks.
-    pub fn with_fmt(mut self, enabled: bool) -> Self {
-        self.fmt = enabled;
-        self
-    }
-
-    /// Enables or disables cargo clippy checks.
-    pub fn with_clippy(mut self, enabled: bool) -> Self {
-        self.clippy = enabled;
-        self
-    }
-
-    /// Enables or disables purist AST linter checks.
-    pub fn with_purist(mut self, enabled: bool) -> Self {
-        self.purist = enabled;
-        self
-    }
-
-    /// Backwards compatibility alias for `with_purist`.
-    pub fn with_opinionated(self, enabled: bool) -> Self {
-        self.with_purist(enabled)
-    }
-
-    /// Enables or disables cargo audit dependency security scan.
-    pub fn with_audit(mut self, enabled: bool) -> Self {
-        self.audit = enabled;
-        self
-    }
-
-    /// Enables or disables markdown format/lint checks.
-    pub fn with_markdown(mut self, enabled: bool) -> Self {
-        self.markdown = enabled;
-        self
-    }
-
-    /// Enables or disables TOML format/lint checks.
-    pub fn with_toml(mut self, enabled: bool) -> Self {
-        self.toml = enabled;
-        self
-    }
-
-    /// Enables or disables JSON format/lint checks.
-    pub fn with_json(mut self, enabled: bool) -> Self {
-        self.json = enabled;
-        self
-    }
-
-    /// Returns the target path, if specified.
-    pub fn path(&self) -> Option<&Path> {
-        self.path.as_deref()
-    }
-
-    /// Returns the configured output format, if specified.
-    pub fn format(&self) -> Option<OutputFormat> {
-        self.format
-    }
-
-    /// Returns the failure threshold.
-    pub fn fail_on(&self) -> FailOn {
-        self.fail_on
-    }
-
-    /// Returns whether changed-only filtering is requested.
-    pub fn is_changed_only(&self) -> bool {
-        self.changed_only
-    }
-
-    /// Returns whether cargo fmt is enabled.
-    pub fn is_fmt_enabled(&self) -> bool {
-        self.fmt
-    }
-
-    /// Returns whether cargo clippy is enabled.
-    pub fn is_clippy_enabled(&self) -> bool {
-        self.clippy
-    }
-
-    /// Returns whether purist AST linter is enabled.
-    pub fn is_purist_enabled(&self) -> bool {
-        self.purist
-    }
-
-    /// Backwards compatibility alias for `is_purist_enabled`.
-    pub fn is_opinionated_enabled(&self) -> bool {
-        self.purist
-    }
-
-    /// Returns whether cargo audit is enabled.
-    pub fn is_audit_enabled(&self) -> bool {
-        self.audit
-    }
-
-    /// Returns whether markdown checks are enabled.
-    pub fn is_markdown_enabled(&self) -> bool {
-        self.markdown
-    }
-
-    /// Returns whether TOML checks are enabled.
-    pub fn is_toml_enabled(&self) -> bool {
-        self.toml
-    }
-
-    /// Returns whether JSON checks are enabled.
-    pub fn is_json_enabled(&self) -> bool {
-        self.json
-    }
-
-    /// Returns whether logging output is suppressed.
-    pub fn is_quiet(&self) -> bool {
-        self.quiet
-    }
-
     /// Executes all configured checking tools and returns the aggregated diagnostic report.
-    pub fn execute(self) -> Result<DiagnosticReport, CheckError> {
-        let target_dir = self.path.as_deref().unwrap_or_else(|| Path::new("."));
-
-        if !target_dir.exists() {
-            return Err(CheckError::PathNotFound(target_dir.to_path_buf()));
-        }
-
-        let fmt_diags = if !self.fmt {
-            Vec::new()
-        } else {
-            let runner = FmtRunner::new(target_dir);
-            runner.run()?
-        };
-
-        let clippy_diags = if !self.clippy {
-            Vec::new()
-        } else {
-            let runner = ClippyRunner::new(target_dir);
-            runner.run()?
-        };
-
-        let purist_report = if !self.purist {
-            DiagnosticReport::default()
-        } else {
-            let runner = PuristRunner::new(target_dir);
-            runner.run()?
-        };
-
-        let audit_diags = if !self.audit {
-            Vec::new()
-        } else {
-            let runner = AuditRunner::new(target_dir);
-            runner.run()?
-        };
-
-        let markdown_diags = if !self.markdown {
-            Vec::new()
-        } else {
-            let runner = MarkdownRunner::new(target_dir);
-            runner.run()?
-        };
-
-        let toml_diags = if !self.toml {
-            Vec::new()
-        } else {
-            let runner = TomlRunner::new(target_dir);
-            runner.run()?
-        };
-
-        let json_diags = if !self.json {
-            Vec::new()
-        } else {
-            let runner = JsonRunner::new(target_dir);
-            runner.run()?
-        };
-
-        let aggregated = aggregate_diagnostics(
-            fmt_diags,
-            clippy_diags,
-            purist_report,
-            audit_diags,
-            markdown_diags,
-            toml_diags,
-            json_diags,
-        );
-
-        if self.changed_only {
-            let vcs = JjVcs::new(target_dir);
-            let changed_files = vcs.query_changed_files()?;
-            Ok(filter_diagnostics_by_changed_files(
-                aggregated,
-                &changed_files,
-                target_dir,
-            ))
-        } else {
-            Ok(aggregated)
-        }
+    pub fn execute(&self) -> Result<DiagnosticReport, CheckError> {
+        execute(self)
     }
 
     /// Runs the check aggregator, rendering reports and returning violation errors.
-    pub fn run(self) -> Result<(), CheckError> {
-        let format = self.format.unwrap_or(OutputFormat::Console);
-        let fail_on = self.fail_on;
-        let report = self.execute()?;
+    pub fn run(&self) -> Result<(), CheckError> {
+        run(self)
+    }
+}
 
-        render_report(&report, format, &mut std::io::stdout())?;
+/// Executes all configured checking tools and returns the aggregated diagnostic report.
+pub fn execute(options: &CheckOptions) -> Result<DiagnosticReport, CheckError> {
+    let target_dir = options.path.as_deref().unwrap_or_else(|| Path::new("."));
 
-        let fails = match fail_on {
-            FailOn::Warnings => report.has_errors() || report.warning_count() > 0,
-            FailOn::Errors => report.has_errors(),
+    if !target_dir.exists() {
+        return Err(CheckError::PathNotFound(target_dir.to_path_buf()));
+    }
+
+    let fmt_diags = if !options.fmt {
+        Vec::new()
+    } else {
+        let runner = FmtRunner::new(target_dir);
+        runner.run()?
+    };
+
+    let clippy_diags = if !options.clippy {
+        Vec::new()
+    } else {
+        let runner = ClippyRunner::new(target_dir);
+        runner.run()?
+    };
+
+    let purist_report = if !options.purist {
+        DiagnosticReport::default()
+    } else {
+        let runner = PuristRunner::new(target_dir);
+        runner.run()?
+    };
+
+    let audit_diags = if !options.audit {
+        Vec::new()
+    } else {
+        let runner = AuditRunner::new(target_dir);
+        runner.run()?
+    };
+
+    let markdown_diags = if !options.markdown {
+        Vec::new()
+    } else {
+        let runner = MarkdownRunner::new(target_dir);
+        runner.run()?
+    };
+
+    let toml_diags = if !options.toml {
+        Vec::new()
+    } else {
+        let runner = TomlRunner::new(target_dir);
+        runner.run()?
+    };
+
+    let json_diags = if !options.json {
+        Vec::new()
+    } else {
+        let runner = JsonRunner::new(target_dir);
+        runner.run()?
+    };
+
+    let aggregated = aggregate_diagnostics(
+        fmt_diags,
+        clippy_diags,
+        purist_report,
+        audit_diags,
+        markdown_diags,
+        toml_diags,
+        json_diags,
+    );
+
+    if options.changed_only {
+        let vcs = JjVcs::new(target_dir);
+        let changed_files = vcs.query_changed_files()?;
+        Ok(filter_diagnostics_by_changed_files(
+            aggregated,
+            &changed_files,
+            target_dir,
+        ))
+    } else {
+        Ok(aggregated)
+    }
+}
+
+/// Runs the check aggregator, rendering reports and returning violation errors.
+pub fn run(options: &CheckOptions) -> Result<(), CheckError> {
+    let format = options.format.unwrap_or(OutputFormat::Console);
+    let fail_on = options.fail_on;
+    let report = execute(options)?;
+
+    render_report(&report, format, &mut std::io::stdout())?;
+
+    let fails = match fail_on {
+        FailOn::Warnings => report.has_errors() || report.warning_count() > 0,
+        FailOn::Errors => report.has_errors(),
+    };
+
+    if fails {
+        let count = match fail_on {
+            FailOn::Warnings => report.error_count() + report.warning_count(),
+            FailOn::Errors => report.error_count(),
         };
-
-        if fails {
-            let count = match fail_on {
-                FailOn::Warnings => report.error_count() + report.warning_count(),
-                FailOn::Errors => report.error_count(),
-            };
-            Err(CheckError::ViolationsFound { count })
-        } else {
-            Ok(())
-        }
+        Err(CheckError::ViolationsFound { count })
+    } else {
+        Ok(())
     }
 }
 
@@ -410,40 +234,39 @@ mod tests {
 
     #[googletest::test]
     fn parse_check_command_with_flags_populates_fields() -> Result<(), Box<dyn std::error::Error>> {
-        let cmd = CheckCommand::new(Some(PathBuf::from("crates/check")), false)
-            .with_format(OutputFormat::Json)
-            .with_fail_on(FailOn::Errors)
-            .with_changed_only(true)
-            .with_fmt(false)
-            .with_clippy(false)
-            .with_purist(false)
-            .with_audit(false)
-            .with_markdown(false)
-            .with_toml(false)
-            .with_json(false);
+        let mut opts = CheckOptions::new(Some(PathBuf::from("crates/check")), false);
+        opts.format = Some(OutputFormat::Json);
+        opts.fail_on = FailOn::Errors;
+        opts.changed_only = true;
+        opts.fmt = false;
+        opts.clippy = false;
+        opts.purist = false;
+        opts.audit = false;
+        opts.markdown = false;
+        opts.toml = false;
+        opts.json = false;
 
-        assert_that!(cmd.path(), eq(Some(Path::new("crates/check"))));
-        assert_that!(cmd.format(), eq(Some(OutputFormat::Json)));
-        assert_that!(cmd.fail_on(), eq(FailOn::Errors));
-        assert_that!(cmd.is_changed_only(), is_true());
-        assert_that!(cmd.is_fmt_enabled(), is_false());
-        assert_that!(cmd.is_clippy_enabled(), is_false());
-        assert_that!(cmd.is_purist_enabled(), is_false());
-        assert_that!(cmd.is_opinionated_enabled(), is_false());
-        assert_that!(cmd.is_audit_enabled(), is_false());
-        assert_that!(cmd.is_markdown_enabled(), is_false());
-        assert_that!(cmd.is_toml_enabled(), is_false());
-        assert_that!(cmd.is_json_enabled(), is_false());
-        assert_that!(cmd.is_quiet(), is_false());
+        assert_that!(&opts.path, eq(&Some(PathBuf::from("crates/check"))));
+        assert_that!(opts.format, eq(Some(OutputFormat::Json)));
+        assert_that!(opts.fail_on, eq(FailOn::Errors));
+        assert_that!(opts.changed_only, is_true());
+        assert_that!(opts.fmt, is_false());
+        assert_that!(opts.clippy, is_false());
+        assert_that!(opts.purist, is_false());
+        assert_that!(opts.audit, is_false());
+        assert_that!(opts.markdown, is_false());
+        assert_that!(opts.toml, is_false());
+        assert_that!(opts.json, is_false());
+        assert_that!(opts.quiet, is_false());
         Ok(())
     }
 
     #[googletest::test]
     fn execute_on_missing_path_returns_path_not_found() -> Result<(), Box<dyn std::error::Error>> {
         let missing = PathBuf::from("non_existent_dir_99999");
-        let cmd = CheckCommand::new(Some(missing.clone()), true);
+        let opts = CheckOptions::new(Some(missing.clone()), true);
 
-        match cmd.execute() {
+        match opts.execute() {
             Err(CheckError::PathNotFound(p)) => {
                 assert_that!(p, eq(&missing));
             }
@@ -468,16 +291,16 @@ mod tests {
         fs::create_dir_all(&temp_dir)?;
         let _guard = TempDirGuard(temp_dir.clone());
 
-        let cmd = CheckCommand::new(Some(temp_dir), true)
-            .with_fmt(false)
-            .with_clippy(false)
-            .with_purist(false)
-            .with_audit(false)
-            .with_markdown(false)
-            .with_toml(false)
-            .with_json(false);
+        let mut opts = CheckOptions::new(Some(temp_dir), true);
+        opts.fmt = false;
+        opts.clippy = false;
+        opts.purist = false;
+        opts.audit = false;
+        opts.markdown = false;
+        opts.toml = false;
+        opts.json = false;
 
-        let report = cmd.execute()?;
+        let report = opts.execute()?;
         assert_that!(report.is_empty(), is_true());
         Ok(())
     }
@@ -489,16 +312,16 @@ mod tests {
         fs::create_dir_all(&temp_dir)?;
         let _guard = TempDirGuard(temp_dir.clone());
 
-        let cmd = CheckCommand::new(Some(temp_dir), true)
-            .with_fmt(false)
-            .with_clippy(false)
-            .with_purist(false)
-            .with_audit(false)
-            .with_markdown(false)
-            .with_toml(false)
-            .with_json(false);
+        let mut opts = CheckOptions::new(Some(temp_dir), true);
+        opts.fmt = false;
+        opts.clippy = false;
+        opts.purist = false;
+        opts.audit = false;
+        opts.markdown = false;
+        opts.toml = false;
+        opts.json = false;
 
-        assert_that!(cmd.run(), ok(anything()));
+        assert_that!(opts.run(), ok(anything()));
         Ok(())
     }
 
@@ -514,16 +337,16 @@ mod tests {
             "pub fn fail() -> Result<(), String> { Err(\"bad\".to_string()) }\n",
         )?;
 
-        let cmd = CheckCommand::new(Some(temp_dir), true)
-            .with_fmt(false)
-            .with_clippy(false)
-            .with_audit(false)
-            .with_markdown(false)
-            .with_toml(false)
-            .with_json(false)
-            .with_fail_on(FailOn::Warnings);
+        let mut opts = CheckOptions::new(Some(temp_dir), true);
+        opts.fmt = false;
+        opts.clippy = false;
+        opts.audit = false;
+        opts.markdown = false;
+        opts.toml = false;
+        opts.json = false;
+        opts.fail_on = FailOn::Warnings;
 
-        match cmd.run() {
+        match opts.run() {
             Err(CheckError::ViolationsFound { count }) => {
                 assert_that!(count, eq(1));
             }
@@ -544,16 +367,16 @@ mod tests {
             "pub fn fail() -> Result<(), String> { Err(\"bad\".to_string()) }\n",
         )?;
 
-        let cmd = CheckCommand::new(Some(temp_dir), true)
-            .with_fmt(false)
-            .with_clippy(false)
-            .with_audit(false)
-            .with_markdown(false)
-            .with_toml(false)
-            .with_json(false)
-            .with_fail_on(FailOn::Errors);
+        let mut opts = CheckOptions::new(Some(temp_dir), true);
+        opts.fmt = false;
+        opts.clippy = false;
+        opts.audit = false;
+        opts.markdown = false;
+        opts.toml = false;
+        opts.json = false;
+        opts.fail_on = FailOn::Errors;
 
-        assert_that!(cmd.run(), ok(anything()));
+        assert_that!(opts.run(), ok(anything()));
         Ok(())
     }
 }

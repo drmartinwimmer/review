@@ -47,3 +47,43 @@
 - `pub fn ApiManifest::with_http(mut self, http: HttpApi) -> Self` — _Sets the HTTP service surface._
 - `pub fn ApiManifest::with_library(mut self, library: LibraryApi) -> Self` — _Sets the library surface._
 - `pub fn DriftItem::new(surface: DriftSurface, name: impl Into < String >, detail: impl Into < String >, is_breaking: bool, old_signature: Option < String >, new_signature: Option < String >) -> Self` — _Creates a new `DriftItem`._
+
+## 2. CLI API
+
+### `api`
+
+Introspect and detect public API drift against API.md
+
+| Flag / Argument   | Type   | Required | Default | Description                                                    |
+| ----------------- | ------ | -------- | ------- | -------------------------------------------------------------- |
+| `--manifest-path` | `PATH` | No       | `-`     | Path to Cargo.toml or workspace root (backwards compatibility) |
+| `--path`          | `PATH` | No       | `-`     | Path to target workspace or crate directory                    |
+| `-q`, `--quiet`   | `-`    | No       | `-`     | Silence non-essential logging output                           |
+
+**Subcommands:**
+
+- `check`
+- `dump`
+
+### `api check`
+
+Compare active codebase against the checked-in API manifest and detect drift
+
+| Flag / Argument    | Type      | Required | Default  | Description                                                            |
+| ------------------ | --------- | -------- | -------- | ---------------------------------------------------------------------- |
+| `--fail-on`        | `FAIL_ON` | No       | `any`    | Severity threshold triggering non-zero exit: any (default) or breaking |
+| `--format`         | `FORMAT`  | No       | `-`      | Output format for diagnostics                                          |
+| `-m`, `--manifest` | `PATH`    | No       | `API.md` | Path to checked-in API manifest file                                   |
+| `--path`           | `PATH`    | No       | `-`      | Path to target crate or workspace directory                            |
+| `-q`, `--quiet`    | `-`       | No       | `-`      | Silence non-essential logging output                                   |
+
+### `api dump`
+
+Inspect codebase and generate or update the API manifest (API.md)
+
+| Flag / Argument  | Type     | Required | Default  | Description                                      |
+| ---------------- | -------- | -------- | -------- | ------------------------------------------------ |
+| `--format`       | `FORMAT` | No       | `-`      | Manifest serialization format (markdown or json) |
+| `-o`, `--output` | `PATH`   | No       | `API.md` | Output manifest file path                        |
+| `--path`         | `PATH`   | No       | `-`      | Path to target crate or workspace directory      |
+| `-q`, `--quiet`  | `-`      | No       | `-`      | Silence non-essential logging output             |

@@ -282,21 +282,33 @@ dependencies = [
 
 [[package]]
 name = "purist"
-version = "0.4.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ce142853062762f03144c00913d73ed9900729f8cbc307647a71b7dba71ff18"
+checksum = "d087111b705f925f5d097e65a2a3d90fc78c3f40eeedaa2377a504d0e215ab32"
 dependencies = [
  "annotate-snippets",
  "anstyle",
  "anstyle-query",
  "clap",
  "proc-macro2",
+ "purist-derive",
  "quote",
  "serde",
  "serde_json",
  "syn 3.0.6",
  "thiserror",
  "toml_edit 0.25.15+spec-1.1.0",
+]
+
+[[package]]
+name = "purist-derive"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "35a2711da77fd189f7135d622a59fab3fae68eb799951b0e9d6f276eb9abb176"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.6",
 ]
 
 [[package]]

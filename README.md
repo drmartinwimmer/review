@@ -5,6 +5,8 @@
 [![CI](https://github.com/drmartinwimmer/review/actions/workflows/ci.yml/badge.svg)](https://github.com/drmartinwimmer/review/actions/workflows/ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/purist.svg?label=purist)](https://crates.io/crates/purist)
 [![Docs.rs](https://docs.rs/purist/badge.svg?label=purist%20docs)](https://docs.rs/purist)
+[![Crates.io](https://img.shields.io/crates/v/api-manifest.svg?label=api-manifest)](https://crates.io/crates/api-manifest)
+[![Docs.rs](https://docs.rs/api-manifest/badge.svg?label=api-manifest%20docs)](https://docs.rs/api-manifest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Built with Rust](https://img.shields.io/badge/rust-2024%20edition-orange.svg)](https://www.rust-lang.org/)
 [![MSRV: 1.85+](https://img.shields.io/badge/MSRV-1.85%2B-blue.svg?logo=rust)](https://www.rust-lang.org/)
@@ -22,9 +24,10 @@
 
 ### 1. Rust CLI Toolkit (`code-review`)
 
-- **`code-review check`**: Runs all relevant linters and formatters (`cargo fmt`, `cargo clippy`, and custom linters), aggregating findings into a normalized diagnostic report (terminal, JSON, or Markdown) with Jujutsu changed-file filtering (`--changed-only`).
+- **`code-review check`**: Runs all relevant linters and formatters (`cargo fmt`, `cargo clippy`, `purist`, `api-manifest`, and format/security checks), aggregating findings into a normalized diagnostic report (terminal, JSON, or Markdown) with Jujutsu changed-file filtering (`--changed-only`).
 - **`code-review configure-lints`**: Programmatically updates `Cargo.toml` using `toml_edit` to inject strict Clippy rules (Don't Panic, Don't Fail Silently, Memory Safety, Numerics, Suppression Bans) while preserving formatting and comments.
 - **`code-review purist`**: AST static analysis engine (powered by `purist` and `syn`) enforcing patterns beyond Clippy's scope (e.g. forbidding inline `mod` declarations in `main.rs`/`lib.rs`, enforcing free functions over dummy structs, requiring VCS/manifest-relative paths, forbidding raw `Result<T, String>`, and validating `#[expect]`/`#[allow]` comments).
+- **`code-review api`**: Public API surface manifest generator and drift auditor (powered by `api-manifest`), inspecting library exports, Clap CLI hierarchies, HTTP endpoints, and `ConfigFile` schemas to maintain checked-in `API.md` manifests.
 
 ### 2. Developer & Review Skills (`skills/`)
 

@@ -17,10 +17,12 @@ thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 purist = { workspace = true }
+api-manifest = { workspace = true }
 toml_edit = { workspace = true }
 
 [dev-dependencies]
 googletest = { workspace = true }
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

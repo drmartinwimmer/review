@@ -83,10 +83,13 @@ Configure or remove strict Clippy lints in Cargo.toml
 
 Run LLVM source-based coverage gates
 
-| Flag / Argument | Type        | Required | Default | Description                           |
-| --------------- | ----------- | -------- | ------- | ------------------------------------- |
-| `-q`, `--quiet` | `-`         | No       | `-`     | Silence non-essential logging output  |
-| `--threshold`   | `THRESHOLD` | No       | `-`     | Minimum coverage threshold percentage |
+| Flag / Argument | Type         | Required | Default | Description                                               |
+| --------------- | ------------ | -------- | ------- | --------------------------------------------------------- |
+| `--fail-under`  | `FAIL_UNDER` | No       | `-`     | Minimum line coverage threshold percentage (0.0 to 100.0) |
+| `--json`        | `-`          | No       | `-`     | Emit coverage report as structured JSON                   |
+| `--lcov`        | `PATH`       | No       | `-`     | Write LCOV-formatted coverage summary to file             |
+| `--path`        | `PATH`       | No       | `-`     | Path to target workspace or crate directory               |
+| `-q`, `--quiet` | `-`          | No       | `-`     | Silence non-essential logging output                      |
 
 ### `code-review purist`
 

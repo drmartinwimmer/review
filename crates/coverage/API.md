@@ -7,17 +7,22 @@
 ### Structs
 
 - `pub struct CoverageCommand { /* no public fields */ }` — _Arguments for the code coverage measurement and threshold enforcement subcommand._
+- `pub struct CoverageReport { pub totals: CoverageSummary, pub files: Vec < FileCoverage > }` — _Normalized coverage report extracted from `cargo llvm-cov --json`._
+- `pub struct CoverageSummary { pub lines: MetricSummary, pub functions: MetricSummary, pub branches: MetricSummary, pub regions: MetricSummary }` — _Aggregated coverage percentages and counts across lines, functions, branches, and regions._
+- `pub struct FileCoverage { pub filename: String, pub summary: CoverageSummary }` — _Per-file coverage metrics._
+- `pub struct MetricSummary { pub count: u64, pub covered: u64, pub percent: f64 }` — _Coverage metric counters and percentage for a specific dimension (lines, functions, branches, regions)._
 
 ### Enums
 
-- `pub enum CoverageError { Io(std :: io :: Error) }` — _Error type for code coverage measurement and threshold enforcement._
+- `pub enum CoverageError { PathNotFound(PathBuf), Io(std :: io :: Error), Json(serde_json :: Error), Command(CommandError), ThresholdNotMet { actual: f64, threshold: f64 } }` — _Error type for code coverage measurement and threshold enforcement._
 
 ### Methods
 
-- `pub fn CoverageCommand::is_quiet(& self) -> bool` — _Returns whether logging output is suppressed._
-- `pub fn CoverageCommand::new(threshold: Option < f64 >, quiet: bool) -> Self` — _Creates a new `CoverageCommand` instance._
-- `pub fn CoverageCommand::run(self) -> Result < () , CoverageError >` — _Runs the code coverage measurement and threshold verification._
-- `pub fn CoverageCommand::threshold(& self) -> Option < f64 >` — _Returns the coverage threshold, if specified._
+- `pub fn CoverageCommand::run(self) -> Result < () , CoverageError >` — _Runs `cargo llvm-cov` and enforces any configured coverage threshold._
+
+### Re-exports
+
+- `pub use tools::LlvmCovRunner;`
 
 ## 2. CLI API
 
@@ -25,7 +30,10 @@
 
 Run LLVM source-based coverage gates
 
-| Flag / Argument | Type        | Required | Default | Description                           |
-| --------------- | ----------- | -------- | ------- | ------------------------------------- |
-| `-q`, `--quiet` | `-`         | No       | `-`     | Silence non-essential logging output  |
-| `--threshold`   | `THRESHOLD` | No       | `-`     | Minimum coverage threshold percentage |
+| Flag / Argument | Type         | Required | Default | Description                                               |
+| --------------- | ------------ | -------- | ------- | --------------------------------------------------------- |
+| `--fail-under`  | `FAIL_UNDER` | No       | `-`     | Minimum line coverage threshold percentage (0.0 to 100.0) |
+| `--json`        | `-`          | No       | `-`     | Emit coverage report as structured JSON                   |
+| `--lcov`        | `PATH`       | No       | `-`     | Write LCOV-formatted coverage summary to file             |
+| `--path`        | `PATH`       | No       | `-`     | Path to target workspace or crate directory               |
+| `-q`, `--quiet` | `-`          | No       | `-`     | Silence non-essential logging output                      |

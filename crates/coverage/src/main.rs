@@ -1,5 +1,5 @@
 use clap::Parser;
-use code_review_coverage::CoverageCommand;
+use code_review_coverage::{CoverageCommand, CoverageError};
 use std::process::ExitCode;
 
 #[derive(Parser, Debug)]
@@ -15,11 +15,13 @@ struct Cli {
 
 impl Cli {
     fn run(self) -> ExitCode {
-        if let Err(err) = self.cmd.run() {
-            eprintln!("Error: {err}");
-            ExitCode::from(2)
-        } else {
-            ExitCode::SUCCESS
+        match self.cmd.run() {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(CoverageError::ThresholdNotMet { .. }) => ExitCode::from(1),
+            Err(err) => {
+                eprintln!("Error: {err}");
+                ExitCode::from(2)
+            }
         }
     }
 }
@@ -27,4 +29,21 @@ impl Cli {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     cli.run()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::prelude::*;
+
+    #[googletest::test]
+    fn run_cli_missing_path_returns_exit_code_2() {
+        let cli = Cli::parse_from([
+            "coverage",
+            "--path",
+            "nonexistent_coverage_dir_404",
+            "--quiet",
+        ]);
+        expect_that!(cli.run(), eq(ExitCode::from(2)));
+    }
 }

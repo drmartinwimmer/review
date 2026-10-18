@@ -28,6 +28,7 @@
 - **`code-review configure-lints`**: Programmatically updates `Cargo.toml` using `toml_edit` to inject strict Clippy rules (Don't Panic, Don't Fail Silently, Memory Safety, Numerics, Suppression Bans) while preserving formatting and comments.
 - **`code-review purist`**: AST static analysis engine (powered by `purist` and `syn`) enforcing patterns beyond Clippy's scope (e.g. forbidding inline `mod` declarations in `main.rs`/`lib.rs`, enforcing free functions over dummy structs, requiring VCS/manifest-relative paths, forbidding raw `Result<T, String>`, and validating `#[expect]`/`#[allow]` comments).
 - **`code-review api`**: Public API surface manifest generator and drift auditor (powered by `api-manifest`), inspecting library exports, Clap CLI hierarchies, HTTP endpoints, and `ConfigFile` schemas to maintain checked-in `API.md` manifests.
+- **`code-review coverage`**: Source-based code coverage engine driving `cargo-llvm-cov` to report line, function, branch, and region coverage metrics and enforce `--fail-under` coverage gates.
 
 ### 2. Developer & Review Skills (`skills/`)
 

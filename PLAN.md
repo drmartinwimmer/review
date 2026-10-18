@@ -447,9 +447,9 @@ When an agent reviews code, it dispatches specialized review subagents in parall
 ### Milestone 5: Code Coverage Engine (`code-review coverage`) & CI Integration
 
 - **Description:** Implement `code-review coverage` wrapping `cargo-llvm-cov` to measure source-based coverage, enforce thresholds, report uncovered error paths, and add a dedicated coverage check to the CI workflow.
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Target Completion Date:** 2026-10-18
-- **Actual Completion Date:** -
+- **Actual Completion Date:** 2026-10-18
 - **Dependencies:** Milestone 4
 - **Tasks File:** `plan/M5.md`
 - **Feedback File:** `plan/FEEDBACK_M5.md`
@@ -606,16 +606,16 @@ When an agent reviews code, it dispatches specialized review subagents in parall
 
 ### Milestone 5: Code Coverage Engine (`code-review coverage`) & CI Integration
 
-- [ ] **M5-T0: Update Specifications (`src/tools/coverage.spec.md`)**
+- [x] **M5-T0: Update Specifications (`crates/coverage/SPEC.md`, `plan/M5.md`, `plan/FEEDBACK_M5.md`)**
   - Define coverage metrics, reporting formats, and threshold enforcement rules.
   - Describe Jujutsu change: `jj describe -m "plan-M5-T0: docs: add spec for code coverage tool"`
-- [ ] **M5-T1: LLVM Coverage Subprocess Driver (`src/tools/coverage.rs`)**
+- [x] **M5-T1: LLVM Coverage Subprocess Driver (`crates/coverage/`)**
   - Implement runner invoking `cargo llvm-cov --all-targets --all-features --json`.
-  - Parse coverage JSON to calculate line, function, and branch coverage.
+  - Parse coverage JSON to calculate line, function, branch, and region coverage.
   - Implement `--fail-under <pct>` threshold validation.
   - Wire `code-review coverage` CLI command.
   - Describe Jujutsu change: `jj describe -m "plan-M5-T1: feat: implement cargo-llvm-cov runner and threshold checker"`
-- [ ] **M5-T2: CI Workflow Coverage Job**
+- [x] **M5-T2: CI Workflow Coverage Job**
   - Update `.github/workflows/ci.yml` to install `cargo-llvm-cov` and execute coverage checks in CI.
   - Describe Jujutsu change: `jj describe -m "plan-M5-T2: ci: add cargo-llvm-cov coverage job to CI workflow"`
 

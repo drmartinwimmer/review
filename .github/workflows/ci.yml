@@ -104,3 +104,30 @@ jobs:
 
       - name: Build Nix package
         run: nix build
+
+  auto-merge:
+    name: Auto-Merge Dependabot PR
+    needs: [lint, test, nix]
+    if: github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auto-merge Rust minor and patch updates
+        if: >-
+          steps.metadata.outputs.package-ecosystem == 'cargo' &&
+          (steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
+           steps.metadata.outputs.update-type == 'version-update:semver-patch')
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr review --approve "$PR_URL"
+          gh pr merge --merge "$PR_URL" || gh pr merge --auto --merge "$PR_URL"

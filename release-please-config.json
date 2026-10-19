@@ -7,7 +7,7 @@
       "extra-files": [
         {
           "type": "toml",
-          "path": "Cargo.toml",
+          "path": "/Cargo.toml",
           "jsonpath": "$.workspace.dependencies['code-review-check'].version"
         }
       ]

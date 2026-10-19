@@ -133,7 +133,6 @@ pub fn parse_clippy_json_stream(stream: &str, target_dir: &Path) -> Vec<Diagnost
         let severity = match msg.level.as_str() {
             "error" => Severity::Error,
             "warning" => Severity::Warning,
-            "note" => Severity::Info,
             "help" => Severity::Hint,
             _ => Severity::Info,
         };
@@ -141,8 +140,7 @@ pub fn parse_clippy_json_stream(stream: &str, target_dir: &Path) -> Vec<Diagnost
         let rule = msg
             .code
             .as_ref()
-            .map(|c| c.code.clone())
-            .unwrap_or_else(|| format!("rustc::{}", msg.level));
+            .map_or_else(|| format!("rustc::{}", msg.level), |c| c.code.clone());
 
         // Find primary span or fallback to first available span
         let primary_span = msg

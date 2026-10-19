@@ -2,16 +2,16 @@ use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
-use toml_edit::{Item, Table, TomlError, value};
+use toml_edit::{Item, Table, TomlError, Value, value};
 
 /// Profile defining which preset of Clippy lints to inject.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LintProfile {
-    /// Comprehensive safety, robustness, memory safety, numerics, suppression hygiene, and complexity rules (40 lints).
+    /// Comprehensive safety, robustness, memory safety, numerics, suppression hygiene, and complexity rules (49 lints).
     #[default]
     Strict,
-    /// Standard baseline safety and robustness rules (37 lints), omitting the strictest slicing
+    /// Standard baseline safety and robustness rules (46 lints), omitting the strictest slicing
     /// and suppression bans (`string_slice`, `indexing_slicing`, and `allow_attributes`).
     Standard,
 }
@@ -29,8 +29,8 @@ impl LintProfile {
 
     pub(crate) fn expected_count(&self) -> usize {
         match self {
-            Self::Strict => 40,
-            Self::Standard => 37,
+            Self::Strict => 49,
+            Self::Standard => 46,
         }
     }
 }
@@ -103,6 +103,7 @@ const LINT_CATEGORIES: &[LintCategory] = &[
             "unused_result_ok",
             "map_err_ignore",
             "assertions_on_result_states",
+            "ignored_unit_patterns",
         ],
     },
     LintCategory {
@@ -114,6 +115,7 @@ const LINT_CATEGORIES: &[LintCategory] = &[
             "multiple_unsafe_ops_per_block",
             "unnecessary_safety_doc",
             "unnecessary_safety_comment",
+            "large_stack_arrays",
         ],
     },
     LintCategory {
@@ -141,6 +143,13 @@ const LINT_CATEGORIES: &[LintCategory] = &[
             "expl_impl_clone_on_copy",
             "infallible_try_from",
             "dbg_macro",
+            "exit",
+            "infinite_loop",
+            "large_types_passed_by_value",
+            "manual_let_else",
+            "match_same_arms",
+            "redundant_closure_for_method_calls",
+            "map_unwrap_or",
         ],
     },
     LintCategory {
@@ -404,7 +413,7 @@ fn ensure_root_lints_workspace_inheritance(
         let is_ws_true = lints_table
             .get("workspace")
             .and_then(|v| v.as_value())
-            .and_then(|v| v.as_bool())
+            .and_then(Value::as_bool)
             .unwrap_or(false);
         if !is_ws_true {
             lints_table.insert("workspace", value(true));
@@ -621,7 +630,7 @@ serde = "1.0" # inline dep comment
         let manifest = TempManifest::new(original)?;
         let result = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(result.modified, is_true());
-        expect_that!(result.lints_configured, eq(40));
+        expect_that!(result.lints_configured, eq(49));
 
         let modified_content = manifest.read()?;
         expect_that!(modified_content, contains_substring("# Top-level comment"));
@@ -658,13 +667,13 @@ version = "0.1.0"
         let manifest = TempManifest::new(initial)?;
         let res1 = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(res1.modified, is_true());
-        expect_that!(res1.lints_configured, eq(40));
+        expect_that!(res1.lints_configured, eq(49));
 
         let content_after_run1 = manifest.read()?;
 
         let res2 = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(res2.modified, is_false());
-        expect_that!(res2.lints_configured, eq(40));
+        expect_that!(res2.lints_configured, eq(49));
 
         let content_after_run2 = manifest.read()?;
         expect_that!(content_after_run1, eq(&content_after_run2));
@@ -680,7 +689,7 @@ members = ["crates/*"]
         let manifest = TempManifest::new(initial)?;
         let res = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(res.modified, is_true());
-        expect_that!(res.lints_configured, eq(40));
+        expect_that!(res.lints_configured, eq(49));
 
         let content = manifest.read()?;
         expect_that!(content, contains_substring("[workspace.lints.clippy]"));
@@ -702,7 +711,7 @@ members = ["crates/*"]
         let manifest = TempManifest::new(initial)?;
         let res = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(res.modified, is_true());
-        expect_that!(res.lints_configured, eq(40));
+        expect_that!(res.lints_configured, eq(49));
 
         let content = manifest.read()?;
         expect_that!(content, contains_substring("[workspace.lints.clippy]"));
@@ -720,7 +729,7 @@ version = "0.1.0"
         let manifest = TempManifest::new(initial)?;
         let res = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(res.modified, is_true());
-        expect_that!(res.lints_configured, eq(40));
+        expect_that!(res.lints_configured, eq(49));
 
         let content = manifest.read()?;
         expect_that!(content, contains_substring("[lints.clippy]"));
@@ -737,7 +746,7 @@ version = "0.1.0"
 "#;
         let manifest_strict = TempManifest::new(initial)?;
         let res_strict = configure_lints(&manifest_strict.path, LintProfile::Strict)?;
-        expect_that!(res_strict.lints_configured, eq(40));
+        expect_that!(res_strict.lints_configured, eq(49));
         let content_strict = manifest_strict.read()?;
         expect_that!(
             content_strict,
@@ -775,10 +784,43 @@ version = "0.1.0"
             content_strict,
             contains_substring("checked_conversions = \"warn\"")
         );
+        expect_that!(
+            content_strict,
+            contains_substring("ignored_unit_patterns = \"warn\"")
+        );
+        expect_that!(
+            content_strict,
+            contains_substring("large_stack_arrays = \"warn\"")
+        );
+        expect_that!(content_strict, contains_substring("exit = \"warn\""));
+        expect_that!(
+            content_strict,
+            contains_substring("infinite_loop = \"warn\"")
+        );
+        expect_that!(
+            content_strict,
+            contains_substring("large_types_passed_by_value = \"warn\"")
+        );
+        expect_that!(
+            content_strict,
+            contains_substring("manual_let_else = \"warn\"")
+        );
+        expect_that!(
+            content_strict,
+            contains_substring("match_same_arms = \"warn\"")
+        );
+        expect_that!(
+            content_strict,
+            contains_substring("redundant_closure_for_method_calls = \"warn\"")
+        );
+        expect_that!(
+            content_strict,
+            contains_substring("map_unwrap_or = \"warn\"")
+        );
 
         let manifest_standard = TempManifest::new(initial)?;
         let res_standard = configure_lints(&manifest_standard.path, LintProfile::Standard)?;
-        expect_that!(res_standard.lints_configured, eq(37));
+        expect_that!(res_standard.lints_configured, eq(46));
         let content_standard = manifest_standard.read()?;
         expect_that!(
             content_standard,
@@ -815,7 +857,7 @@ version = "0.1.0"
 
         let remove_res = remove_lints(&manifest.path)?;
         expect_that!(remove_res.modified, is_true());
-        expect_that!(remove_res.lints_configured, eq(40));
+        expect_that!(remove_res.lints_configured, eq(49));
 
         let content_after_remove = manifest.read()?;
         expect_that!(content_after_remove, not(contains_substring("[lints]")));
@@ -849,7 +891,7 @@ unsafe_code = "forbid"
 
         let remove_res = remove_lints(&manifest.path)?;
         expect_that!(remove_res.modified, is_true());
-        expect_that!(remove_res.lints_configured, eq(40));
+        expect_that!(remove_res.lints_configured, eq(49));
 
         let content_after_remove = manifest.read()?;
         expect_that!(content_after_remove, contains_substring("[lints.rust]"));
@@ -958,7 +1000,7 @@ members = ["crates/*"]
 
         let remove_res = remove_lints(&manifest.path)?;
         expect_that!(remove_res.modified, is_true());
-        expect_that!(remove_res.lints_configured, eq(40));
+        expect_that!(remove_res.lints_configured, eq(49));
 
         let content_after = manifest.read()?;
         expect_that!(content_after, not(contains_substring("[workspace.lints]")));
@@ -992,7 +1034,7 @@ members = ["crates/*"]
 
         let remove_res = remove_lints(&manifest.path)?;
         expect_that!(remove_res.modified, is_true());
-        expect_that!(remove_res.lints_configured, eq(40));
+        expect_that!(remove_res.lints_configured, eq(49));
 
         let content_after = manifest.read()?;
         expect_that!(content_after, not(contains_substring("[workspace.lints]")));
@@ -1018,7 +1060,7 @@ version = "0.1.0"
 
         let res_standard = configure_lints(&manifest.path, LintProfile::Standard)?;
         expect_that!(res_standard.modified, is_true());
-        expect_that!(res_standard.lints_configured, eq(37));
+        expect_that!(res_standard.lints_configured, eq(46));
 
         let content_standard = manifest.read()?;
         expect_that!(content_standard, not(contains_substring("string_slice")));

@@ -7,8 +7,7 @@ pub fn is_tool_available(cmd: &str) -> bool {
     Command::new(cmd)
         .arg("--version")
         .output()
-        .map(|out| out.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|out| out.status.success())
 }
 
 /// Recursively discovers files with matching extensions, ignoring hidden directories and build artifacts.

@@ -506,9 +506,14 @@ mod tests {
     fn run_with_violation_and_fail_on_warnings_fails() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir =
             std::env::temp_dir().join(format!("test_check_viol_warn_{}", std::process::id()));
-        fs::create_dir_all(&temp_dir)?;
+        let src_dir = temp_dir.join("src");
+        fs::create_dir_all(&src_dir)?;
         let _guard = TempDirGuard(temp_dir.clone());
-        let bad_file = temp_dir.join("lib.rs");
+        fs::write(
+            temp_dir.join("Cargo.toml"),
+            "[package]\nname = \"check-viol-warn\"\nversion = \"0.1.0\"\n",
+        )?;
+        let bad_file = src_dir.join("lib.rs");
         fs::write(
             &bad_file,
             "pub fn fail() -> Result<(), String> { Err(\"bad\".to_string()) }\n",
@@ -536,9 +541,14 @@ mod tests {
     fn run_with_warning_and_fail_on_errors_succeeds() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir =
             std::env::temp_dir().join(format!("test_check_viol_err_{}", std::process::id()));
-        fs::create_dir_all(&temp_dir)?;
+        let src_dir = temp_dir.join("src");
+        fs::create_dir_all(&src_dir)?;
         let _guard = TempDirGuard(temp_dir.clone());
-        let bad_file = temp_dir.join("lib.rs");
+        fs::write(
+            temp_dir.join("Cargo.toml"),
+            "[package]\nname = \"check-viol-err\"\nversion = \"0.1.0\"\n",
+        )?;
+        let bad_file = src_dir.join("lib.rs");
         fs::write(
             &bad_file,
             "pub fn fail() -> Result<(), String> { Err(\"bad\".to_string()) }\n",

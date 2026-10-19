@@ -51,6 +51,10 @@ mod tests {
             std::env::temp_dir().join(format!("test_purist_runner_clean_{}", std::process::id()));
         fs::create_dir_all(&temp_dir)?;
         let _guard = TempDirGuard(temp_dir.clone());
+        fs::write(
+            temp_dir.join("Cargo.toml"),
+            "[package]\nname = \"clean\"\nversion = \"0.1.0\"\n",
+        )?;
         let file_path = temp_dir.join("lib.rs");
         fs::write(&file_path, "pub fn calculate(a: i32) -> i32 { a * 2 }\n")?;
 
@@ -67,6 +71,10 @@ mod tests {
             std::env::temp_dir().join(format!("test_purist_runner_viol_{}", std::process::id()));
         fs::create_dir_all(&temp_dir)?;
         let _guard = TempDirGuard(temp_dir.clone());
+        fs::write(
+            temp_dir.join("Cargo.toml"),
+            "[package]\nname = \"viol\"\nversion = \"0.1.0\"\n",
+        )?;
         let file_path = temp_dir.join("lib.rs");
         fs::write(
             &file_path,

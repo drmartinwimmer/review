@@ -3,7 +3,7 @@ use purist::{Diagnostic, Severity, Span};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use toml_edit::ImDocument;
+use toml_edit::DocumentMut;
 
 /// Runner for TOML checks and formatters (Taplo or in-process toml_edit).
 pub struct TomlRunner {
@@ -58,7 +58,7 @@ impl TomlRunner {
                 continue;
             };
 
-            if let Err(err) = ImDocument::parse(content) {
+            if let Err(err) = content.parse::<DocumentMut>() {
                 let normalized = normalize_path(file, &self.target_path);
                 let span = Span::new(normalized, 1, 1, 1, 1);
                 diagnostics.push(

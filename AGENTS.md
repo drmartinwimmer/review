@@ -30,7 +30,7 @@ The aggregator invokes:
 
 - **Rust formatting**: `cargo fmt --check`
 - **Rust compiler & Clippy lints**: `cargo clippy --all-targets --all-features -- -D warnings`
-- **Purist AST linter**: `cargo run -p code-review -- purist --path .`
+- **Purist AST linter**: `cargo run -p code-review -- purist`
 - **Dependency security audit**: `cargo audit`
 - **TOML formatting**: `taplo fmt --check`
 - **Markdown & JSON formatting**: `prettier --check "**/*.{md,json}"` (or `mdformat`)
@@ -46,7 +46,7 @@ cargo run -p code-review -- check --changed-only
 Review agents must always run the Purist AST linter (`purist`) to identify and resolve architectural, style, and hygiene issues:
 
 ```bash
-cargo run -p code-review -- purist --path .
+cargo run -p code-review -- purist
 ```
 
 Ensure zero violations (errors or warnings) are reported before submitting changes.

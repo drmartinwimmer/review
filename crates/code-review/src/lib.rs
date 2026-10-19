@@ -378,6 +378,10 @@ mod tests {
         ));
         std::fs::create_dir_all(&temp_dir)?;
         let _guard = TempDirGuard(temp_dir.clone());
+        std::fs::write(
+            temp_dir.join("Cargo.toml"),
+            "[package]\nname = \"clean\"\nversion = \"0.1.0\"\n",
+        )?;
         let file_path = temp_dir.join("clean.rs");
         std::fs::write(&file_path, "pub fn helper() -> i32 { 10 }\n")?;
 
@@ -398,6 +402,10 @@ mod tests {
         ));
         std::fs::create_dir_all(&temp_dir)?;
         let _guard = TempDirGuard(temp_dir.clone());
+        std::fs::write(
+            temp_dir.join("Cargo.toml"),
+            "[package]\nname = \"viol\"\nversion = \"0.1.0\"\n",
+        )?;
         let file_path = temp_dir.join("main.rs");
         std::fs::write(&file_path, "mod helpers { pub fn broken() {} }\n")?;
 

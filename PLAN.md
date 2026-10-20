@@ -12,6 +12,7 @@
    - `code-review opinionated`: AST-based static analysis engine checking code patterns beyond Clippy's scope (inline modules, dummy unit structs, VCS-relative paths, error enums, clippy suppression hygiene).
    - `code-review api`: Introspects and generates a checked-in API manifest (`API.md`) for libraries (public items), binary CLIs (subcommands/flags), and HTTP services (endpoints/methods), verifying intentionality and catching drift.
    - `code-review coverage`: Drives `cargo-llvm-cov` to measure source-based coverage, enforce minimum coverage thresholds, and report uncovered code paths.
+   - `code-review score`: Computes a hierarchical complexity and readability scorecard for the crate and each submodule—rewarding low cyclomatic/cognitive complexity, minimal API surface and high encapsulation, low non-test/non-comment lines of code (SLOC), shallow nesting depth, and narrow function signatures—to guide agents in refactoring for readability.
 2. **Automated SemVer & Release Pipeline:**
    - **Release Please** governs developer intent via Conventional Commits (`feat:`, `fix:`, `feat!:`, `BREAKING CHANGE:`), automatically updating `Cargo.toml` versions, changelogs, and release PRs.
    - **`cargo-semver-checks`** enforces code reality via `rustdoc` JSON analysis:
@@ -77,6 +78,15 @@ In modern software development and especially in the Rust ecosystem, several est
 
 - **`cargo-llvm-cov`:** The established standard for Rust code coverage, utilizing LLVM source-based code coverage instrumentation (`-C instrument-coverage`). It produces accurate line, branch, and region metrics without requiring debug-unfriendly ptrace wrappers, seamlessly outputting LCOV, JSON, and summary tables.
 
+### 8. Readability & Complexity Scoring as an Agent Optimization Proxy
+
+- **Multi-Dimensional Readability Proxy:** Rather than relying on a single blunt metric, high-signal code readability scorecards combine:
+  - **Cyclomatic & Cognitive Complexity:** Measuring control-flow branching (`if`, `match`, loops, boolean operators, `?` propagation) alongside nesting penalties to quantify the mental state required to trace a function.
+  - **Information Hiding & Submodule API Minimalism:** Following Parnas's module decomposition principles—each submodule should hide a secret behind a narrow interface. Rewarding low ratios of exported (`pub`, `pub(crate)`, `pub(super)`) vs. private items, fewer exposed struct fields, and concise parameter lists.
+  - **Production SLOC (Excluding Tests & Comments):** Stripping `#[cfg(test)]` blocks, test functions, docstrings, comments, and blank lines so agents are never penalized for writing thorough documentation or comprehensive test suites, while rewarding compact production logic.
+  - **Structural Cohesion & Nesting Depth:** Penalizing deep indentation, large parameter counts, and excessive cross-module fan-out (`use` imports).
+- **Agent Feedback Loop:** Providing a deterministic, hierarchical scorecard (for the overall crate and every submodule) along with ranked refactoring suggestions gives coding agents an objective gradient to iteratively simplify functions, tighten visibility, and split bloated modules.
+
 ---
 
 ## System Overview & Directory Structure
@@ -128,7 +138,12 @@ In modern software development and especially in the Rust ecosystem, several est
 │   │   │   ├── http_extractor.rs       # HTTP router & endpoint extractor
 │   │   │   ├── manifest.rs             # API.md generation, serialization, and formatting
 │   │   │   └── diff.rs                 # Manifest drift comparison & breaking change detection
-│   │   └── coverage.rs                 # Tool 5: LLVM Source-Based Coverage Engine (`code-review coverage`)
+│   │   ├── coverage.rs                 # Tool 5: LLVM Source-Based Coverage Engine (`code-review coverage`)
+│   │   └── score/                      # Tool 6: Readability & Complexity Scorecard (`code-review score`)
+│   │       ├── mod.rs
+│   │       ├── metrics.rs              # AST visitors for complexity, API surface, SLOC, nesting, & signatures
+│   │       ├── scorecard.rs            # Submodule & crate score aggregation, grading, and diffing
+│   │       └── recommendations.rs      # Ranked refactoring hints for agents
 ├── skills/                             # Agent Skills Directory
 │   ├── distilling-feedback/            # Skill: Review past sessions and distill guidelines
 │   │   ├── SKILL.md
@@ -267,7 +282,32 @@ In modern software development and especially in the Rust ecosystem, several est
   - Flags uncovered lines, untested functions, and ignored error-handling paths.
   - Outputs formats: Console summary table, LCOV (`--lcov`), and structured JSON (`--json`).
 
-### 6. Automated SemVer & Release Pipeline: Release Please + `cargo-semver-checks`
+### 6. Tool 6: Readability & Complexity Scorecard Engine (`code-review score`)
+
+- **Purpose:** Compute a deterministic complexity and readability scorecard for the entire crate (or workspace) and each submodule, acting as a high-signal proxy for codebase readability that coding agents can optimize against during refactoring.
+- **Evaluated Dimensions & Metrics (Per-Submodule and Crate-Wide):**
+  1. **Cyclomatic & Cognitive Complexity of Functions:**
+     - Traverses function and method bodies via `syn` AST visitors to count decision points (`if`, `else if`, `match` arms, `while`, `for`, `loop`, short-circuit `&&`/`||`, and `?` try operators).
+     - Computes **Cognitive Complexity** by applying nesting depth multipliers to control-flow structures, closures, and deeply nested blocks.
+     - Rewards low average, p95, and maximum per-function complexity; penalizes outlier "monster functions".
+  2. **Minimal API Surface & Submodule Encapsulation:**
+     - Inspects visibility modifiers across the crate root (`pub`) and every submodule (`pub`, `pub(crate)`, `pub(super)` vs. module-private).
+     - Rewards a minimal exported surface: fewer public functions/methods/types, high private-to-exposed item ratios (information hiding), private struct fields over exposed fields, and concise re-exports.
+  3. **Production Lines of Code (SLOC — Excluding Tests & Comments):**
+     - Counts pure production source lines of code per function, submodule, and crate, explicitly stripping `#[cfg(test)]` modules, `#[test]` / `#[gtest]` functions, doc comments (`///`, `//!`), inline/block comments (`//`, `/* */`), and blank lines.
+     - Rewards compact functions (e.g., < 40 SLOC) and focused submodules (e.g., < 300 SLOC) without penalizing thorough documentation or extensive unit tests.
+  4. **Signature Simplicity, Nesting Depth & Coupling:**
+     - **Function Signatures:** Penalizes functions with excessive parameter counts (> 4 parameters), complex nested return/argument types, or heavy generic/where-clause bounds.
+     - **Maximum Nesting Depth:** Rewards flat control flow (early returns / guard clauses) over deep block indentation (> 3 levels).
+     - **Module Fan-Out & State Width:** Tracks cross-module `use` imports and struct field / enum variant counts to reward high cohesion and narrow state types.
+- **Scorecard Output & Agent Refactoring Loop:**
+  - **Multi-Component Submodule & Crate Scorecard:** Rather than collapsing readability into a single opaque number per submodule, the report explicitly surfaces the decomposed component scores and raw metrics per submodule (`src/foo.rs`, `src/bar/mod.rs`) and rolled up for the crate—displaying side-by-side columns/fields for `Complexity` (avg/p95/max cyclomatic & cognitive), `API Surface` (`pub`/`pub(crate)`/private counts & encapsulation ratio), `Production SLOC` (non-test, non-comment lines), and `Structure` (max nesting depth, parameter count, fan-out), alongside an optional composite summary.
+  - **Actionable Refactoring Drivers:** Emits a prioritized list of concrete refactoring opportunities tied to the specific component metrics (e.g., top hotspot functions to decompose, over-exposed submodule items that can be narrowed to private/`pub(crate)`, and oversized submodules to split).
+  - **CLI Flags & Gating:**
+    - `code-review score [--path <dir>] [--format console|json|markdown] [--fail-under <score>] [--diff <baseline-json>]`
+    - Supports baseline comparison (`--diff`) showing per-component and per-submodule deltas so agents can verify which specific readability dimensions improved or regressed during refactoring.
+
+### 7. Automated SemVer & Release Pipeline: Release Please + `cargo-semver-checks`
 
 - **Purpose:** Seamless, tamper-proof versioning and publishing on GitHub and Crates.io.
 - **Components:**
@@ -284,7 +324,7 @@ In modern software development and especially in the Rust ecosystem, several est
      - Uses `googleapis/release-please-action@v5`.
      - When a release PR merges to `main`, tags the release and runs `cargo publish --token ...`.
 
-### 7. Skill Suite: Thematic Subagent Review Skills
+### 8. Skill Suite: Thematic Subagent Review Skills
 
 #### Skill 1: Feedback Reflection & Guideline Distillation (`skills/distilling-feedback`)
 
@@ -340,7 +380,7 @@ In modern software development and especially in the Rust ecosystem, several est
 **Subagent Orchestration Pattern:**
 When an agent reviews code, it dispatches specialized review subagents in parallel with dedicated review prompts, then aggregates their structured feedback into a consolidated report.
 
-### 8. Evaluation Suite: Inspect AI + Fence Sandbox (`evals/`)
+### 9. Evaluation Suite: Inspect AI + Fence Sandbox (`evals/`)
 
 - **Environment:** Isolated Python virtual environment managed via `uv` (`uv run inspect eval ...`).
 - **Sandbox Architecture (`fence`):**
@@ -463,6 +503,16 @@ When an agent reviews code, it dispatches specialized review subagents in parall
 - **Dependencies:** Milestone 9
 - **Tasks File:** `plan/M10.md`
 - **Feedback File:** `plan/FEEDBACK_M10.md`
+
+### Milestone 11: Readability & Complexity Scorecard Engine (`code-review score`)
+
+- **Description:** Implement `code-review score` (`crates/score/`) to compute a hierarchical complexity and readability scorecard for the crate and each submodule. Reward low cyclomatic and cognitive complexity of functions, a minimal API surface and high encapsulation (both crate-wide and per submodule), low production lines of code (excluding tests and comments), shallow nesting depth, and concise function signatures, providing actionable refactoring targets for agents.
+- **Status:** `[ ] Pending`
+- **Target Completion Date:** 2026-11-05
+- **Actual Completion Date:** -
+- **Dependencies:** Milestone 10
+- **Tasks File:** `plan/M11.md`
+- **Feedback File:** `plan/FEEDBACK_M11.md`
 
 ---
 
@@ -660,6 +710,37 @@ When an agent reviews code, it dispatches specialized review subagents in parall
   - Verify that `code-review check`, `code-review opinionated`, and `code-review api check` are correctly leveraged by the agent.
   - Record baseline metrics in `evals/BENCHMARK_RESULTS.md`.
   - Describe Jujutsu change: `jj describe -m "plan-M10-T1: test: execute baseline Inspect AI benchmark runs"`
+
+### Milestone 11: Readability & Complexity Scorecard Engine (`code-review score`)
+
+- [ ] **M11-T0: Update Specifications (`crates/score/SPEC.md`, `plan/M11.md`, `plan/FEEDBACK_M11.md`)**
+  - Define exact formulas, weights, and normalization curves for the readability scorecard across crate and submodule boundaries:
+    - Cyclomatic and cognitive complexity per function (`if`, `match`, loops, `&&`/`||`, `?` operators, nesting depth multipliers).
+    - API surface minimalism and encapsulation ratio (`pub`, `pub(crate)`, `pub(super)` vs. private items, exposed struct fields, and re-exports per submodule).
+    - Production SLOC counting (excluding `#[cfg(test)]` modules, `#[test]`/`#[gtest]` functions, comments, docstrings, and blank lines).
+    - Structural readability proxies (function parameter counts, generic bound complexity, maximum block nesting depth, and cross-module `use` fan-out).
+  - Document CLI arguments (`--path`, `--format`, `--fail-under`, `--diff`), exit code semantics, and agent refactoring recommendation output schemas.
+  - Describe Jujutsu change: `jj --no-pager describe -m "plan-M11-T0: docs: add spec for complexity and readability scorecard engine"`
+- [ ] **M11-T1: AST Metrics Collector (`crates/score/src/metrics.rs`)**
+  - Create the `crates/score` workspace member crate (`code-review-score`).
+  - Implement `syn` AST visitors and source line analyzers to extract per-function and per-submodule metrics:
+    - Function cyclomatic complexity, cognitive complexity, nesting depth, parameter count, and production SLOC.
+    - Submodule item visibility counts (`pub`, `pub(crate)`, `pub(super)`, private), exposed struct fields, enum variants, and `use` import fan-out.
+    - Non-test, non-comment SLOC calculator that accurately strips `#[cfg(test)]` items, test functions, line/block/doc comments, and blank lines.
+  - Write comprehensive unit tests using `googletest` covering each metric and edge case.
+  - Describe Jujutsu change: `jj --no-pager describe -m "plan-M11-T1: feat: implement AST metrics collector for complexity, API surface, and SLOC"`
+- [ ] **M11-T2: Submodule & Crate Scorecard Aggregator and Agent Recommendations (`crates/score/src/scorecard.rs`, `recommendations.rs`)**
+  - Implement hierarchical module tree discovery linking crate roots (`lib.rs`, `main.rs`) and submodules (`foo.rs`, `foo/mod.rs`).
+  - Surface decomposed component metrics and normalized `0–100` dimension sub-scores (`Complexity`, `API Minimalism`, `SLOC`, `Structure`) for each submodule and the overall crate (rather than only a single opaque score), alongside optional composite scores and grades (`A`–`F`).
+  - Implement `recommendations.rs` to generate ranked, actionable refactoring guidance for agents tied to specific component metrics (e.g., splitting high-complexity functions, narrowing over-exposed `pub` items to private/`pub(crate)`, or decomposing oversized submodules).
+  - Implement baseline scorecard comparison (`--diff`) showing per-component and composite deltas per submodule.
+  - Unit test component scoring formulas, grade boundaries, diff calculations, and recommendation ranking.
+  - Describe Jujutsu change: `jj --no-pager describe -m "plan-M11-T2: feat: implement hierarchical scorecard grading, diffing, and agent recommendations"`
+- [ ] **M11-T3: CLI Integration, Multi-Format Reporting & Quality Gate Verification**
+  - Wire `ScoreCommand` (`code-review score`) into the top-level `code-review` CLI (`crates/code-review/src/lib.rs`) supporting Console tables, JSON (`--format json`), and Markdown (`--format markdown`) outputs, plus `--fail-under <score>` gating.
+  - Optionally expose scorecard summary or threshold checks in `code-review check`.
+  - Verify all workspace quality checks pass cleanly (`cargo run -p code-review -- check`, `cargo test --all-targets --all-features`).
+  - Describe Jujutsu change: `jj --no-pager describe -m "plan-M11-T3: feat: wire code-review score subcommand into CLI and complete milestone 11"`
 
 ---
 

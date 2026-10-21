@@ -31,6 +31,7 @@ The aggregator invokes:
 - **Rust formatting**: `cargo fmt --check`
 - **Rust compiler & Clippy lints**: `cargo clippy --all-targets --all-features -- -D warnings`
 - **Purist AST linter**: `cargo run -p code-review -- purist`
+- **API manifest drift check**: `cargo run -p code-review -- api check`
 - **Dependency security audit**: `cargo audit`
 - **TOML formatting**: `taplo fmt --check`
 - **Markdown & JSON formatting**: `prettier --check "**/*.{md,json}"` (or `mdformat`)

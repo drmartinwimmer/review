@@ -17,11 +17,12 @@ thiserror = { workspace = true }
 code-review-configure-lints = { workspace = true }
 code-review-check = { workspace = true }
 purist = { workspace = true }
-code-review-api = { workspace = true }
+api-manifest = { workspace = true }
 code-review-coverage = { workspace = true }
 
 [dev-dependencies]
 googletest = { workspace = true }
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

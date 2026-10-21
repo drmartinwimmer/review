@@ -56,43 +56,33 @@ fn crawl_directory(dir: &Path, extensions: &[&str], results: &mut Vec<PathBuf>) 
 mod tests {
     use super::*;
     use googletest::prelude::*;
-
-    struct TempDirGuard(PathBuf);
-
-    impl Drop for TempDirGuard {
-        fn drop(&mut self) {
-            drop(fs::remove_dir_all(&self.0));
-        }
-    }
+    use tempfile::tempdir;
 
     #[googletest::test]
     fn find_files_with_extensions_locates_files_and_skips_hidden_dirs()
     -> Result<(), Box<dyn std::error::Error>> {
-        let temp_dir = std::env::temp_dir().join(format!("test_find_files_{}", std::process::id()));
-        fs::create_dir_all(temp_dir.join("subdir"))?;
-        fs::create_dir_all(temp_dir.join(".hidden"))?;
-        fs::create_dir_all(temp_dir.join("target"))?;
-        let _guard = TempDirGuard(temp_dir.clone());
+        let temp_dir = tempdir()?;
+        let root = temp_dir.path();
+        fs::create_dir_all(root.join("subdir"))?;
+        fs::create_dir_all(root.join(".hidden"))?;
+        fs::create_dir_all(root.join("target"))?;
 
-        fs::write(temp_dir.join("doc.md"), "# Title")?;
-        fs::write(temp_dir.join("subdir/nested.md"), "# Nested")?;
-        fs::write(temp_dir.join(".hidden/secret.md"), "# Secret")?;
-        fs::write(temp_dir.join("target/ignored.md"), "# Ignored")?;
-        fs::write(temp_dir.join("config.json"), "{}")?;
+        fs::write(root.join("doc.md"), "# Title")?;
+        fs::write(root.join("subdir/nested.md"), "# Nested")?;
+        fs::write(root.join(".hidden/secret.md"), "# Secret")?;
+        fs::write(root.join("target/ignored.md"), "# Ignored")?;
+        fs::write(root.join("config.json"), "{}")?;
 
-        let md_files = find_files_with_extensions(&temp_dir, &["md"]);
+        let md_files = find_files_with_extensions(root, &["md"]);
         expect_that!(md_files.len(), eq(2));
-        expect_that!(md_files.contains(&temp_dir.join("doc.md")), is_true());
+        expect_that!(md_files.contains(&root.join("doc.md")), is_true());
+        expect_that!(md_files.contains(&root.join("subdir/nested.md")), is_true());
         expect_that!(
-            md_files.contains(&temp_dir.join("subdir/nested.md")),
-            is_true()
-        );
-        expect_that!(
-            md_files.contains(&temp_dir.join(".hidden/secret.md")),
+            md_files.contains(&root.join(".hidden/secret.md")),
             is_false()
         );
         expect_that!(
-            md_files.contains(&temp_dir.join("target/ignored.md")),
+            md_files.contains(&root.join("target/ignored.md")),
             is_false()
         );
         Ok(())

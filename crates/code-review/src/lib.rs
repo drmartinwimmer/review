@@ -142,7 +142,8 @@ impl Cli {
             Ok(()) => ExitCode::SUCCESS,
             Err(CodeReviewError::Check(CheckError::ViolationsFound { .. }))
             | Err(CodeReviewError::Purist(PuristError::LintViolationsFound { .. }))
-            | Err(CodeReviewError::Api(ApiManifestError::DriftDetected { .. })) => {
+            | Err(CodeReviewError::Api(ApiManifestError::DriftDetected { .. }))
+            | Err(CodeReviewError::Coverage(CoverageError::ThresholdNotMet { .. })) => {
                 ExitCode::from(1)
             }
             Err(err) => {
@@ -439,6 +440,24 @@ mod tests {
         ])?;
         expect_that!(drift_cli.run(), eq(ExitCode::from(1)));
 
+        Ok(())
+    }
+
+    #[googletest::test]
+    fn parse_cli_coverage_subcommand_parses_flags() -> Result<(), Box<dyn std::error::Error>> {
+        let cli = Cli::try_parse_from([
+            "code-review",
+            "coverage",
+            "--path",
+            "crates/check",
+            "--fail-under",
+            "85.5",
+            "--json",
+            "--lcov",
+            "lcov.info",
+            "--quiet",
+        ])?;
+        expect_that!(matches!(cli.command(), Commands::Coverage(_)), is_true());
         Ok(())
     }
 }

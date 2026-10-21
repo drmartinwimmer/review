@@ -42,6 +42,7 @@ let_underscore_must_use = "warn"
 unused_result_ok = "warn"
 map_err_ignore = "warn"
 assertions_on_result_states = "warn"
+ignored_unit_patterns = "warn"
 
 # Don't Do Unsafe Things with Memory
 mem_forget = "warn"
@@ -49,6 +50,7 @@ undocumented_unsafe_blocks = "warn"
 multiple_unsafe_ops_per_block = "warn"
 unnecessary_safety_doc = "warn"
 unnecessary_safety_comment = "warn"
+large_stack_arrays = "warn"
 
 # Don't Do Potentially Incorrect Things with Numbers
 float_cmp = "warn"
@@ -68,6 +70,13 @@ iter_not_returning_iterator = "warn"
 expl_impl_clone_on_copy = "warn"
 infallible_try_from = "warn"
 dbg_macro = "warn"
+exit = "warn"
+infinite_loop = "warn"
+large_types_passed_by_value = "warn"
+manual_let_else = "warn"
+match_same_arms = "warn"
+redundant_closure_for_method_calls = "warn"
+map_unwrap_or = "warn"
 
 # Don't `allow` Your Way Around These Lints - every suppression must be
 # a deliberate #[expect(..., reason = "…")] rather than a silent #[allow]

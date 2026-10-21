@@ -194,23 +194,17 @@ pub fn parse_audit_json(json_str: &str, lock_file: &Path) -> Vec<Diagnostic> {
 
     for (kind, warnings) in audit.warnings {
         for warn in warnings {
-            let pkg_name = warn
-                .package
-                .as_ref()
-                .map(|p| format!("{}@{}", p.name, p.version))
-                .unwrap_or_else(|| "dependency".to_string());
+            let pkg_name = warn.package.as_ref().map_or_else(
+                || "dependency".to_string(),
+                |p| format!("{}@{}", p.name, p.version),
+            );
 
-            let adv_id = warn
-                .advisory
-                .as_ref()
-                .map(|a| a.id.as_str())
-                .unwrap_or("notice");
+            let adv_id = warn.advisory.as_ref().map_or("notice", |a| a.id.as_str());
 
             let title = warn
                 .advisory
                 .as_ref()
-                .map(|a| a.title.as_str())
-                .unwrap_or("dependency advisory notice");
+                .map_or("dependency advisory notice", |a| a.title.as_str());
 
             let msg = format!("Security warning [{kind}] for {pkg_name}: {title} ({adv_id})");
 

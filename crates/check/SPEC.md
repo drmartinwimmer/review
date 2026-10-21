@@ -114,7 +114,15 @@ Options:
   - Formatting violations mapped to `rule: "fmt::json"`, `severity: Severity::Warning`.
   - Syntax errors mapped to `rule: "json::syntax"`, `severity: Severity::Error`.
 
-### 4.8 Jujutsu VCS Filter (`tools/vcs_jj.rs`)
+### 4.8 API Manifest Drift Runner (`tools/api.rs`)
+
+- **Execution**: Discovers checked-in `API.md` files across the target workspace or crate and compares them against the active codebase using `api_manifest::ApiManifest::read_from_file`, `ApiManifest::extract_from_crate`, and `ApiManifest::diff`.
+- **Diagnostics**:
+  - Breaking drift (removals or signature modifications) mapped to `rule: "api::drift::breaking"`, `severity: Severity::Error`.
+  - Non-breaking additions mapped to `rule: "api::drift::addition"`, `severity: Severity::Warning`.
+  - Manifest parsing or extraction errors mapped to `rule: "api::manifest_parse_error"` / `"api::extraction_error"`, `severity: Severity::Error`.
+
+### 4.9 Jujutsu VCS Filter (`tools/vcs_jj.rs`)
 
 - **Execution**: `jj --no-pager diff --summary`
 - **Parsing**:

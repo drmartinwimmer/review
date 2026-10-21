@@ -35,25 +35,14 @@ fn main() -> ExitCode {
 mod tests {
     use super::*;
     use googletest::prelude::*;
-    use std::fs;
     use std::path::PathBuf;
-
-    struct TempDirGuard(PathBuf);
-
-    impl Drop for TempDirGuard {
-        fn drop(&mut self) {
-            drop(fs::remove_dir_all(&self.0));
-        }
-    }
+    use tempfile::tempdir;
 
     #[googletest::test]
     fn run_cli_clean_target_returns_success() -> Result<(), Box<dyn std::error::Error>> {
-        let temp_dir =
-            std::env::temp_dir().join(format!("test_check_cli_clean_{}", std::process::id()));
-        fs::create_dir_all(&temp_dir)?;
-        let _guard = TempDirGuard(temp_dir.clone());
+        let temp_dir = tempdir()?;
 
-        let cmd = CheckCommand::new(Some(temp_dir), true)
+        let cmd = CheckCommand::new(Some(temp_dir.path().to_path_buf()), true)
             .with_fmt(false)
             .with_clippy(false)
             .with_purist(false)

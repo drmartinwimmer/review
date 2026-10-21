@@ -1,5 +1,5 @@
+use api_manifest::{ApiManifestCommand, ApiManifestError};
 use clap::{Parser, Subcommand};
-use code_review_api::{ApiCommand, ApiError};
 use code_review_check::{CheckCommand, CheckError};
 use code_review_configure_lints::{CargoTomlError, ConfigureLintsCommand};
 use code_review_coverage::{CoverageCommand, CoverageError};
@@ -24,7 +24,7 @@ pub enum CodeReviewError {
 
     /// Errors originating from the API drift detector subcommand.
     #[error(transparent)]
-    Api(#[from] ApiError),
+    Api(#[from] ApiManifestError),
 
     /// Errors originating from the coverage runner subcommand.
     #[error(transparent)]
@@ -46,7 +46,8 @@ pub enum Commands {
     Purist(PuristCommand),
 
     /// Introspect and detect public API drift against API.md
-    Api(ApiCommand),
+    #[command(alias = "api-manifest")]
+    Api(ApiManifestCommand),
 
     /// Run LLVM source-based coverage gates
     Coverage(CoverageCommand),
@@ -89,7 +90,7 @@ impl Commands {
 )]
 pub struct Cli {
     /// Output format for reports and diagnostics
-    #[arg(long, global = true, value_enum, default_value_t = OutputFormat::Console)]
+    #[arg(long, value_enum, default_value_t = OutputFormat::Console)]
     format: OutputFormat,
 
     /// Increase verbosity level (-v, -vv)
@@ -140,7 +141,8 @@ impl Cli {
         match self.command.run_with_format(self.format) {
             Ok(()) => ExitCode::SUCCESS,
             Err(CodeReviewError::Check(CheckError::ViolationsFound { .. }))
-            | Err(CodeReviewError::Purist(PuristError::LintViolationsFound { .. })) => {
+            | Err(CodeReviewError::Purist(PuristError::LintViolationsFound { .. }))
+            | Err(CodeReviewError::Api(ApiManifestError::DriftDetected { .. })) => {
                 ExitCode::from(1)
             }
             Err(err) => {
@@ -166,12 +168,7 @@ mod tests {
         expect_that!(cli.format(), eq(OutputFormat::Console));
         expect_that!(cli.verbose(), eq(0));
         expect_that!(cli.is_quiet(), is_false());
-        expect_that!(
-            cli.command(),
-            eq(&Commands::Check(
-                CheckCommand::default().with_format(OutputFormat::Console)
-            ))
-        );
+        expect_that!(cli.command(), eq(&Commands::Check(CheckCommand::default())));
         Ok(())
     }
 
@@ -244,6 +241,7 @@ mod tests {
             (["code-review", "purist"].as_slice(), "purist"),
             (["code-review", "opinionated"].as_slice(), "purist"),
             (["code-review", "api"].as_slice(), "api"),
+            (["code-review", "api-manifest"].as_slice(), "api"),
             (["code-review", "coverage"].as_slice(), "coverage"),
         ];
 
@@ -270,7 +268,8 @@ mod tests {
             .with_audit(false)
             .with_markdown(false)
             .with_toml(false)
-            .with_json(false);
+            .with_json(false)
+            .with_api(false);
         let cli = Cli::new(OutputFormat::Console, 0, true, Commands::Check(cmd));
         expect_that!(cli.run(), eq(ExitCode::SUCCESS));
     }
@@ -294,6 +293,7 @@ mod tests {
             "--markdown=false",
             "--toml=false",
             "--json=false",
+            "--api=false",
             "--quiet",
         ];
         let cli = Cli::try_parse_from(args)?;
@@ -311,6 +311,7 @@ mod tests {
                 expect_that!(cmd.is_markdown_enabled(), is_false());
                 expect_that!(cmd.is_toml_enabled(), is_false());
                 expect_that!(cmd.is_json_enabled(), is_false());
+                expect_that!(cmd.is_api_enabled(), is_false());
                 expect_that!(cmd.is_quiet(), is_true());
             }
             _ => return Err("Expected Check subcommand".into()),
@@ -361,28 +362,15 @@ mod tests {
         Ok(())
     }
 
-    struct TempDirGuard(std::path::PathBuf);
-
-    impl Drop for TempDirGuard {
-        fn drop(&mut self) {
-            drop(std::fs::remove_dir_all(&self.0));
-        }
-    }
-
     #[googletest::test]
     fn run_cli_purist_command_on_clean_target_returns_success()
     -> Result<(), Box<dyn std::error::Error>> {
-        let temp_dir = std::env::temp_dir().join(format!(
-            "test_code_review_purist_clean_{}",
-            std::process::id()
-        ));
-        std::fs::create_dir_all(&temp_dir)?;
-        let _guard = TempDirGuard(temp_dir.clone());
+        let temp_dir = tempfile::tempdir()?;
         std::fs::write(
-            temp_dir.join("Cargo.toml"),
+            temp_dir.path().join("Cargo.toml"),
             "[package]\nname = \"clean\"\nversion = \"0.1.0\"\n",
         )?;
-        let file_path = temp_dir.join("clean.rs");
+        let file_path = temp_dir.path().join("clean.rs");
         std::fs::write(&file_path, "pub fn helper() -> i32 { 10 }\n")?;
 
         let cmd = PuristCommand::new(Some(file_path), true);
@@ -396,17 +384,12 @@ mod tests {
     #[googletest::test]
     fn run_cli_purist_command_with_violations_returns_exit_code_1()
     -> Result<(), Box<dyn std::error::Error>> {
-        let temp_dir = std::env::temp_dir().join(format!(
-            "test_code_review_purist_viol_{}",
-            std::process::id()
-        ));
-        std::fs::create_dir_all(&temp_dir)?;
-        let _guard = TempDirGuard(temp_dir.clone());
+        let temp_dir = tempfile::tempdir()?;
         std::fs::write(
-            temp_dir.join("Cargo.toml"),
+            temp_dir.path().join("Cargo.toml"),
             "[package]\nname = \"viol\"\nversion = \"0.1.0\"\n",
         )?;
-        let file_path = temp_dir.join("main.rs");
+        let file_path = temp_dir.path().join("main.rs");
         std::fs::write(&file_path, "mod helpers { pub fn broken() {} }\n")?;
 
         let cmd = PuristCommand::new(Some(file_path), true);
@@ -414,6 +397,48 @@ mod tests {
         let code = cli.run();
 
         expect_that!(code, eq(ExitCode::from(1)));
+        Ok(())
+    }
+
+    #[googletest::test]
+    fn run_cli_api_dump_and_check_handles_clean_and_drift() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let temp_dir = tempfile::tempdir()?;
+
+        std::fs::write(
+            temp_dir.path().join("Cargo.toml"),
+            "[package]\nname = \"sample\"\nversion = \"0.1.0\"\n",
+        )?;
+        let src_dir = temp_dir.path().join("src");
+        std::fs::create_dir_all(&src_dir)?;
+        std::fs::write(src_dir.join("lib.rs"), "pub fn greet() {}\n")?;
+
+        let temp_str = temp_dir.path().display().to_string();
+        let dump_cli =
+            Cli::try_parse_from(["code-review", "api", "dump", "--path", &temp_str, "--quiet"])?;
+        expect_that!(dump_cli.run(), eq(ExitCode::SUCCESS));
+
+        let check_cli = Cli::try_parse_from([
+            "code-review",
+            "api",
+            "check",
+            "--path",
+            &temp_str,
+            "--quiet",
+        ])?;
+        expect_that!(check_cli.run(), eq(ExitCode::SUCCESS));
+
+        std::fs::write(src_dir.join("lib.rs"), "// removed\n")?;
+        let drift_cli = Cli::try_parse_from([
+            "code-review",
+            "api",
+            "check",
+            "--path",
+            &temp_str,
+            "--quiet",
+        ])?;
+        expect_that!(drift_cli.run(), eq(ExitCode::from(1)));
+
         Ok(())
     }
 }

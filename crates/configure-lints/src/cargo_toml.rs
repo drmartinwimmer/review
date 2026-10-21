@@ -570,37 +570,23 @@ mod tests {
     use super::*;
     use googletest::prelude::*;
     use std::fs;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    static TEST_COUNTER: AtomicUsize = AtomicUsize::new(0);
+    use tempfile::TempDir;
 
     struct TempManifest {
         path: PathBuf,
-        dir: PathBuf,
+        _dir: TempDir,
     }
 
     impl TempManifest {
         fn new(content: &str) -> Result<Self, Box<dyn std::error::Error>> {
-            let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-            let dir = std::env::temp_dir().join(format!(
-                "code_review_test_{}_{}",
-                std::process::id(),
-                id
-            ));
-            fs::create_dir_all(&dir)?;
-            let path = dir.join("Cargo.toml");
+            let dir = tempfile::tempdir()?;
+            let path = dir.path().join("Cargo.toml");
             fs::write(&path, content)?;
-            Ok(Self { path, dir })
+            Ok(Self { path, _dir: dir })
         }
 
         fn read(&self) -> Result<String, Box<dyn std::error::Error>> {
             Ok(fs::read_to_string(&self.path)?)
-        }
-    }
-
-    impl Drop for TempManifest {
-        fn drop(&mut self) {
-            drop(fs::remove_dir_all(&self.dir));
         }
     }
 

@@ -35,27 +35,17 @@ mod tests {
     use super::*;
     use googletest::prelude::*;
     use std::fs;
-
-    struct TempDirGuard(PathBuf);
-
-    impl Drop for TempDirGuard {
-        fn drop(&mut self) {
-            drop(fs::remove_dir_all(&self.0));
-        }
-    }
+    use tempfile::tempdir;
 
     #[googletest::test]
     fn run_purist_runner_on_clean_code_produces_no_diagnostics()
     -> Result<(), Box<dyn std::error::Error>> {
-        let temp_dir =
-            std::env::temp_dir().join(format!("test_purist_runner_clean_{}", std::process::id()));
-        fs::create_dir_all(&temp_dir)?;
-        let _guard = TempDirGuard(temp_dir.clone());
+        let temp_dir = tempdir()?;
         fs::write(
-            temp_dir.join("Cargo.toml"),
+            temp_dir.path().join("Cargo.toml"),
             "[package]\nname = \"clean\"\nversion = \"0.1.0\"\n",
         )?;
-        let file_path = temp_dir.join("lib.rs");
+        let file_path = temp_dir.path().join("lib.rs");
         fs::write(&file_path, "pub fn calculate(a: i32) -> i32 { a * 2 }\n")?;
 
         let runner = PuristRunner::new(file_path);
@@ -67,15 +57,12 @@ mod tests {
     #[googletest::test]
     fn run_purist_runner_on_violation_produces_diagnostics()
     -> Result<(), Box<dyn std::error::Error>> {
-        let temp_dir =
-            std::env::temp_dir().join(format!("test_purist_runner_viol_{}", std::process::id()));
-        fs::create_dir_all(&temp_dir)?;
-        let _guard = TempDirGuard(temp_dir.clone());
+        let temp_dir = tempdir()?;
         fs::write(
-            temp_dir.join("Cargo.toml"),
+            temp_dir.path().join("Cargo.toml"),
             "[package]\nname = \"viol\"\nversion = \"0.1.0\"\n",
         )?;
-        let file_path = temp_dir.join("lib.rs");
+        let file_path = temp_dir.path().join("lib.rs");
         fs::write(
             &file_path,
             "pub fn broken() -> Result<(), String> { Err(\"error\".into()) }\n",

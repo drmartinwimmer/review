@@ -12,7 +12,7 @@ repository = "https://github.com/drmartinwimmer/review"
 clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-toml_edit = "0.22"
+toml_edit = "0.25"
 thiserror = "2.0"
 googletest = "0.14"
 code-review-configure-lints = { path = "crates/configure-lints", version = "0.1.0" }

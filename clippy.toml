@@ -1,0 +1,2 @@
+# Maximum cognitive complexity allowed per function before `clippy::cognitive_complexity` warns.
+cognitive-complexity-threshold = 15

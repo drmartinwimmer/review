@@ -8,10 +8,10 @@ use toml_edit::{Item, Table, TomlError, value};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LintProfile {
-    /// Comprehensive safety, robustness, memory safety, numerics, and suppression hygiene rules (34 lints).
+    /// Comprehensive safety, robustness, memory safety, numerics, suppression hygiene, and complexity rules (35 lints).
     #[default]
     Strict,
-    /// Standard baseline safety and robustness rules (31 lints), omitting the strictest slicing
+    /// Standard baseline safety and robustness rules (32 lints), omitting the strictest slicing
     /// and suppression bans (`string_slice`, `indexing_slicing`, and `allow_attributes`).
     Standard,
 }
@@ -29,8 +29,8 @@ impl LintProfile {
 
     pub(crate) fn expected_count(&self) -> usize {
         match self {
-            Self::Strict => 34,
-            Self::Standard => 31,
+            Self::Strict => 35,
+            Self::Standard => 32,
         }
     }
 }
@@ -144,6 +144,11 @@ const LINT_CATEGORIES: &[LintCategory] = &[
         description: "every suppression must be a deliberate #[expect(..., reason = \"…\")] rather than a silent #[allow]",
         lints: &["allow_attributes", "allow_attributes_without_reason"],
     },
+    LintCategory {
+        title: "Maintainability & Complexity",
+        description: "keep functions easy to understand",
+        lints: &["cognitive_complexity"],
+    },
 ];
 
 fn validate_document_structure(doc: &toml_edit::DocumentMut) -> Result<(), CargoTomlError> {
@@ -201,97 +206,116 @@ fn validate_document_structure(doc: &toml_edit::DocumentMut) -> Result<(), Cargo
     Ok(())
 }
 
+fn format_category_comment(category: &LintCategory, is_first_category: bool) -> String {
+    let leading_newline = if is_first_category { "" } else { "\n" };
+    if category.description.is_empty() {
+        format!("{leading_newline}# {}\n", category.title)
+    } else {
+        format!(
+            "{leading_newline}# {} - {}\n",
+            category.title, category.description
+        )
+    }
+}
+
+fn populate_empty_clippy_table(table: &mut toml_edit::Table, profile: LintProfile) {
+    let mut is_first_category = true;
+    for category in LINT_CATEGORIES {
+        let active_lints: Vec<&'static str> = category
+            .lints
+            .iter()
+            .copied()
+            .filter(|lint| profile.includes_lint(lint))
+            .collect();
+
+        if active_lints.is_empty() {
+            continue;
+        }
+
+        let comment = format_category_comment(category, is_first_category);
+
+        for (idx, lint) in active_lints.into_iter().enumerate() {
+            table.insert(lint, toml_edit::value("warn"));
+            if idx == 0
+                && let Some(mut k) = table.key_mut(lint)
+            {
+                k.leaf_decor_mut().set_prefix(comment.as_str());
+            }
+        }
+
+        is_first_category = false;
+    }
+}
+
+fn extract_matching_key_prefix(
+    table: &toml_edit::Table,
+    key: &str,
+    expected_header: &str,
+) -> Option<String> {
+    let k = table.key(key)?;
+    let prefix = k.leaf_decor().prefix()?.as_str()?;
+    prefix.contains(expected_header).then(|| prefix.to_string())
+}
+
+fn restore_transferred_prefix(
+    table: &mut toml_edit::Table,
+    key: &str,
+    expected_header: &str,
+    comment: Option<String>,
+) {
+    if let Some(comment) = comment
+        && let Some(mut k) = table.key_mut(key)
+        && k.leaf_decor()
+            .prefix()
+            .and_then(|p| p.as_str())
+            .is_none_or(|s| !s.contains(expected_header))
+    {
+        k.leaf_decor_mut().set_prefix(comment);
+    }
+}
+
+fn update_existing_clippy_table(table: &mut toml_edit::Table, profile: LintProfile) {
+    let mut transferred_panic_comment = None;
+    let mut transferred_allow_comment = None;
+
+    if profile == LintProfile::Standard {
+        transferred_panic_comment =
+            extract_matching_key_prefix(table, "string_slice", "# Don't Panic");
+        transferred_allow_comment =
+            extract_matching_key_prefix(table, "allow_attributes", "# Don't `allow`");
+
+        table.remove("string_slice");
+        table.remove("indexing_slicing");
+        table.remove("allow_attributes");
+    }
+
+    for category in LINT_CATEGORIES {
+        for lint in category.lints {
+            if profile.includes_lint(lint) {
+                set_lint_to_warn(table, lint);
+            }
+        }
+    }
+
+    restore_transferred_prefix(
+        table,
+        "unwrap_used",
+        "# Don't Panic",
+        transferred_panic_comment,
+    );
+    restore_transferred_prefix(
+        table,
+        "allow_attributes_without_reason",
+        "# Don't `allow`",
+        transferred_allow_comment,
+    );
+}
+
 fn populate_clippy_table(table: &mut toml_edit::Table, profile: LintProfile) {
     if table.is_empty() {
-        let mut is_first_category = true;
-        for category in LINT_CATEGORIES {
-            let active_lints: Vec<&'static str> = category
-                .lints
-                .iter()
-                .copied()
-                .filter(|lint| profile.includes_lint(lint))
-                .collect();
-
-            if active_lints.is_empty() {
-                continue;
-            }
-
-            let comment = if category.description.is_empty() {
-                if is_first_category {
-                    format!("# {}\n", category.title)
-                } else {
-                    format!("\n# {}\n", category.title)
-                }
-            } else if is_first_category {
-                format!("# {} - {}\n", category.title, category.description)
-            } else {
-                format!("\n# {} - {}\n", category.title, category.description)
-            };
-
-            for (idx, lint) in active_lints.into_iter().enumerate() {
-                let val = toml_edit::value("warn");
-                table.insert(lint, val);
-                if idx == 0
-                    && let Some(mut k) = table.key_mut(lint)
-                {
-                    k.leaf_decor_mut().set_prefix(comment.as_str());
-                }
-            }
-
-            is_first_category = false;
-        }
+        populate_empty_clippy_table(table, profile);
     } else {
-        // Table is not empty. If Standard profile, prune the 3 strict lints and transfer category comments.
-        let mut transferred_panic_comment = None;
-        let mut transferred_allow_comment = None;
-
-        if profile == LintProfile::Standard {
-            if let Some(k) = table.key("string_slice")
-                && let Some(prefix) = k.leaf_decor().prefix().and_then(|p| p.as_str())
-                && prefix.contains("# Don't Panic")
-            {
-                transferred_panic_comment = Some(prefix.to_string());
-            }
-
-            if let Some(k) = table.key("allow_attributes")
-                && let Some(prefix) = k.leaf_decor().prefix().and_then(|p| p.as_str())
-                && prefix.contains("# Don't `allow`")
-            {
-                transferred_allow_comment = Some(prefix.to_string());
-            }
-
-            table.remove("string_slice");
-            table.remove("indexing_slicing");
-            table.remove("allow_attributes");
-        }
-
-        for category in LINT_CATEGORIES {
-            for lint in category.lints {
-                if profile.includes_lint(lint) {
-                    set_lint_to_warn(table, lint);
-                }
-            }
-        }
-
-        if let Some(comment) = transferred_panic_comment
-            && let Some(mut k) = table.key_mut("unwrap_used")
-            && k.leaf_decor()
-                .prefix()
-                .and_then(|p| p.as_str())
-                .is_none_or(|s| !s.contains("# Don't Panic"))
-        {
-            k.leaf_decor_mut().set_prefix(comment);
-        }
-
-        if let Some(comment) = transferred_allow_comment
-            && let Some(mut k) = table.key_mut("allow_attributes_without_reason")
-            && k.leaf_decor()
-                .prefix()
-                .and_then(|p| p.as_str())
-                .is_none_or(|s| !s.contains("# Don't `allow`"))
-        {
-            k.leaf_decor_mut().set_prefix(comment);
-        }
+        update_existing_clippy_table(table, profile);
     }
 }
 
@@ -571,7 +595,7 @@ serde = "1.0" # inline dep comment
         let manifest = TempManifest::new(original)?;
         let result = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(result.modified, is_true());
-        expect_that!(result.lints_configured, eq(34));
+        expect_that!(result.lints_configured, eq(35));
 
         let modified_content = manifest.read()?;
         expect_that!(modified_content, contains_substring("# Top-level comment"));
@@ -608,13 +632,13 @@ version = "0.1.0"
         let manifest = TempManifest::new(initial)?;
         let res1 = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(res1.modified, is_true());
-        expect_that!(res1.lints_configured, eq(34));
+        expect_that!(res1.lints_configured, eq(35));
 
         let content_after_run1 = manifest.read()?;
 
         let res2 = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(res2.modified, is_false());
-        expect_that!(res2.lints_configured, eq(34));
+        expect_that!(res2.lints_configured, eq(35));
 
         let content_after_run2 = manifest.read()?;
         expect_that!(content_after_run1, eq(&content_after_run2));
@@ -630,7 +654,7 @@ members = ["crates/*"]
         let manifest = TempManifest::new(initial)?;
         let res = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(res.modified, is_true());
-        expect_that!(res.lints_configured, eq(34));
+        expect_that!(res.lints_configured, eq(35));
 
         let content = manifest.read()?;
         expect_that!(content, contains_substring("[workspace.lints.clippy]"));
@@ -652,7 +676,7 @@ members = ["crates/*"]
         let manifest = TempManifest::new(initial)?;
         let res = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(res.modified, is_true());
-        expect_that!(res.lints_configured, eq(34));
+        expect_that!(res.lints_configured, eq(35));
 
         let content = manifest.read()?;
         expect_that!(content, contains_substring("[workspace.lints.clippy]"));
@@ -670,7 +694,7 @@ version = "0.1.0"
         let manifest = TempManifest::new(initial)?;
         let res = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(res.modified, is_true());
-        expect_that!(res.lints_configured, eq(34));
+        expect_that!(res.lints_configured, eq(35));
 
         let content = manifest.read()?;
         expect_that!(content, contains_substring("[lints.clippy]"));
@@ -679,7 +703,7 @@ version = "0.1.0"
     }
 
     #[googletest::test]
-    fn configure_lints_profile_differences_strict_34_and_standard_31()
+    fn configure_lints_profile_differences_strict_and_standard()
     -> Result<(), Box<dyn std::error::Error>> {
         let initial = r#"[package]
 name = "demo"
@@ -687,7 +711,7 @@ version = "0.1.0"
 "#;
         let manifest_strict = TempManifest::new(initial)?;
         let res_strict = configure_lints(&manifest_strict.path, LintProfile::Strict)?;
-        expect_that!(res_strict.lints_configured, eq(34));
+        expect_that!(res_strict.lints_configured, eq(35));
         let content_strict = manifest_strict.read()?;
         expect_that!(
             content_strict,
@@ -701,10 +725,14 @@ version = "0.1.0"
             content_strict,
             contains_substring("allow_attributes = \"warn\"")
         );
+        expect_that!(
+            content_strict,
+            contains_substring("cognitive_complexity = \"warn\"")
+        );
 
         let manifest_standard = TempManifest::new(initial)?;
         let res_standard = configure_lints(&manifest_standard.path, LintProfile::Standard)?;
-        expect_that!(res_standard.lints_configured, eq(31));
+        expect_that!(res_standard.lints_configured, eq(32));
         let content_standard = manifest_standard.read()?;
         expect_that!(
             content_standard,
@@ -741,7 +769,7 @@ version = "0.1.0"
 
         let remove_res = remove_lints(&manifest.path)?;
         expect_that!(remove_res.modified, is_true());
-        expect_that!(remove_res.lints_configured, eq(34));
+        expect_that!(remove_res.lints_configured, eq(35));
 
         let content_after_remove = manifest.read()?;
         expect_that!(content_after_remove, not(contains_substring("[lints]")));
@@ -775,7 +803,7 @@ unsafe_code = "forbid"
 
         let remove_res = remove_lints(&manifest.path)?;
         expect_that!(remove_res.modified, is_true());
-        expect_that!(remove_res.lints_configured, eq(34));
+        expect_that!(remove_res.lints_configured, eq(35));
 
         let content_after_remove = manifest.read()?;
         expect_that!(content_after_remove, contains_substring("[lints.rust]"));
@@ -884,7 +912,7 @@ members = ["crates/*"]
 
         let remove_res = remove_lints(&manifest.path)?;
         expect_that!(remove_res.modified, is_true());
-        expect_that!(remove_res.lints_configured, eq(34));
+        expect_that!(remove_res.lints_configured, eq(35));
 
         let content_after = manifest.read()?;
         expect_that!(content_after, not(contains_substring("[workspace.lints]")));
@@ -918,7 +946,7 @@ members = ["crates/*"]
 
         let remove_res = remove_lints(&manifest.path)?;
         expect_that!(remove_res.modified, is_true());
-        expect_that!(remove_res.lints_configured, eq(34));
+        expect_that!(remove_res.lints_configured, eq(35));
 
         let content_after = manifest.read()?;
         expect_that!(content_after, not(contains_substring("[workspace.lints]")));
@@ -944,7 +972,7 @@ version = "0.1.0"
 
         let res_standard = configure_lints(&manifest.path, LintProfile::Standard)?;
         expect_that!(res_standard.modified, is_true());
-        expect_that!(res_standard.lints_configured, eq(31));
+        expect_that!(res_standard.lints_configured, eq(32));
 
         let content_standard = manifest.read()?;
         expect_that!(content_standard, not(contains_substring("string_slice")));

@@ -1,6 +1,7 @@
 use crate::tools::{
-    AuditRunner, ClippyRunner, FmtRunner, JjError, JjVcs, JsonRunner, MarkdownRunner, PuristRunner,
-    TomlRunner, aggregate_diagnostics, filter_diagnostics_by_changed_files,
+    ApiError, ApiRunner, AuditRunner, ClippyRunner, FmtRunner, JjError, JjVcs, JsonRunner,
+    MarkdownRunner, PuristRunner, TomlRunner, aggregate_diagnostics,
+    filter_diagnostics_by_changed_files,
 };
 use clap::Args;
 use purist::{DiagnosticReport, OutputFormat, render_report};
@@ -35,6 +36,9 @@ pub enum CheckError {
 
     #[error("Jujutsu VCS error: {0}")]
     Vcs(#[from] JjError),
+
+    #[error("API manifest check error: {0}")]
+    Api(#[from] ApiError),
 
     #[error("I/O error during check execution: {0}")]
     Io(#[from] std::io::Error),
@@ -133,6 +137,16 @@ pub struct CheckCommand {
     )]
     json: bool,
 
+    /// Run API manifest drift checks (enabled by default; set to false to skip)
+    #[arg(
+        long,
+        default_value_t = true,
+        action = clap::ArgAction::Set,
+        num_args(0..=1),
+        default_missing_value = "true"
+    )]
+    api: bool,
+
     /// Silence non-essential logging output
     #[arg(short, long)]
     quiet: bool,
@@ -152,6 +166,7 @@ impl Default for CheckCommand {
             markdown: true,
             toml: true,
             json: true,
+            api: true,
             quiet: false,
         }
     }
@@ -232,6 +247,12 @@ impl CheckCommand {
         self
     }
 
+    /// Enables or disables API manifest drift checks.
+    pub fn with_api(mut self, enabled: bool) -> Self {
+        self.api = enabled;
+        self
+    }
+
     /// Returns the target path, if specified.
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref()
@@ -290,6 +311,11 @@ impl CheckCommand {
     /// Returns whether JSON checks are enabled.
     pub fn is_json_enabled(&self) -> bool {
         self.json
+    }
+
+    /// Returns whether API manifest drift checks are enabled.
+    pub fn is_api_enabled(&self) -> bool {
+        self.api
     }
 
     /// Returns whether logging output is suppressed.
@@ -354,7 +380,14 @@ impl CheckCommand {
             runner.run()?
         };
 
-        let aggregated = aggregate_diagnostics(
+        let api_diags = if !self.api {
+            Vec::new()
+        } else {
+            let runner = ApiRunner::new(target_dir);
+            runner.run()?
+        };
+
+        let mut all_diags = aggregate_diagnostics(
             fmt_diags,
             clippy_diags,
             purist_report,
@@ -362,7 +395,10 @@ impl CheckCommand {
             markdown_diags,
             toml_diags,
             json_diags,
-        );
+        )
+        .diagnostics;
+        all_diags.extend(api_diags);
+        let aggregated = DiagnosticReport::new(all_diags);
 
         if self.changed_only {
             let vcs = JjVcs::new(target_dir);
@@ -420,7 +456,8 @@ mod tests {
             .with_audit(false)
             .with_markdown(false)
             .with_toml(false)
-            .with_json(false);
+            .with_json(false)
+            .with_api(false);
 
         assert_that!(cmd.path(), eq(Some(Path::new("crates/check"))));
         assert_that!(cmd.format(), eq(Some(OutputFormat::Json)));
@@ -434,6 +471,7 @@ mod tests {
         assert_that!(cmd.is_markdown_enabled(), is_false());
         assert_that!(cmd.is_toml_enabled(), is_false());
         assert_that!(cmd.is_json_enabled(), is_false());
+        assert_that!(cmd.is_api_enabled(), is_false());
         assert_that!(cmd.is_quiet(), is_false());
         Ok(())
     }
@@ -452,30 +490,20 @@ mod tests {
         Ok(())
     }
 
-    struct TempDirGuard(PathBuf);
-
-    impl Drop for TempDirGuard {
-        fn drop(&mut self) {
-            drop(fs::remove_dir_all(&self.0));
-        }
-    }
-
     #[googletest::test]
     fn execute_with_all_checks_skipped_returns_empty_report()
     -> Result<(), Box<dyn std::error::Error>> {
-        let temp_dir =
-            std::env::temp_dir().join(format!("test_check_all_skipped_{}", std::process::id()));
-        fs::create_dir_all(&temp_dir)?;
-        let _guard = TempDirGuard(temp_dir.clone());
+        let temp_dir = tempfile::tempdir()?;
 
-        let cmd = CheckCommand::new(Some(temp_dir), true)
+        let cmd = CheckCommand::new(Some(temp_dir.path().to_path_buf()), true)
             .with_fmt(false)
             .with_clippy(false)
             .with_purist(false)
             .with_audit(false)
             .with_markdown(false)
             .with_toml(false)
-            .with_json(false);
+            .with_json(false)
+            .with_api(false);
 
         let report = cmd.execute()?;
         assert_that!(report.is_empty(), is_true());
@@ -484,19 +512,17 @@ mod tests {
 
     #[googletest::test]
     fn run_with_skipped_checks_succeeds() -> Result<(), Box<dyn std::error::Error>> {
-        let temp_dir =
-            std::env::temp_dir().join(format!("test_check_run_ok_{}", std::process::id()));
-        fs::create_dir_all(&temp_dir)?;
-        let _guard = TempDirGuard(temp_dir.clone());
+        let temp_dir = tempfile::tempdir()?;
 
-        let cmd = CheckCommand::new(Some(temp_dir), true)
+        let cmd = CheckCommand::new(Some(temp_dir.path().to_path_buf()), true)
             .with_fmt(false)
             .with_clippy(false)
             .with_purist(false)
             .with_audit(false)
             .with_markdown(false)
             .with_toml(false)
-            .with_json(false);
+            .with_json(false)
+            .with_api(false);
 
         assert_that!(cmd.run(), ok(anything()));
         Ok(())
@@ -504,13 +530,11 @@ mod tests {
 
     #[googletest::test]
     fn run_with_violation_and_fail_on_warnings_fails() -> Result<(), Box<dyn std::error::Error>> {
-        let temp_dir =
-            std::env::temp_dir().join(format!("test_check_viol_warn_{}", std::process::id()));
-        let src_dir = temp_dir.join("src");
+        let temp_dir = tempfile::tempdir()?;
+        let src_dir = temp_dir.path().join("src");
         fs::create_dir_all(&src_dir)?;
-        let _guard = TempDirGuard(temp_dir.clone());
         fs::write(
-            temp_dir.join("Cargo.toml"),
+            temp_dir.path().join("Cargo.toml"),
             "[package]\nname = \"check-viol-warn\"\nversion = \"0.1.0\"\n",
         )?;
         let bad_file = src_dir.join("lib.rs");
@@ -519,13 +543,14 @@ mod tests {
             "pub fn fail() -> Result<(), String> { Err(\"bad\".to_string()) }\n",
         )?;
 
-        let cmd = CheckCommand::new(Some(temp_dir), true)
+        let cmd = CheckCommand::new(Some(temp_dir.path().to_path_buf()), true)
             .with_fmt(false)
             .with_clippy(false)
             .with_audit(false)
             .with_markdown(false)
             .with_toml(false)
             .with_json(false)
+            .with_api(false)
             .with_fail_on(FailOn::Warnings);
 
         match cmd.run() {
@@ -539,13 +564,11 @@ mod tests {
 
     #[googletest::test]
     fn run_with_warning_and_fail_on_errors_succeeds() -> Result<(), Box<dyn std::error::Error>> {
-        let temp_dir =
-            std::env::temp_dir().join(format!("test_check_viol_err_{}", std::process::id()));
-        let src_dir = temp_dir.join("src");
+        let temp_dir = tempfile::tempdir()?;
+        let src_dir = temp_dir.path().join("src");
         fs::create_dir_all(&src_dir)?;
-        let _guard = TempDirGuard(temp_dir.clone());
         fs::write(
-            temp_dir.join("Cargo.toml"),
+            temp_dir.path().join("Cargo.toml"),
             "[package]\nname = \"check-viol-err\"\nversion = \"0.1.0\"\n",
         )?;
         let bad_file = src_dir.join("lib.rs");
@@ -554,13 +577,14 @@ mod tests {
             "pub fn fail() -> Result<(), String> { Err(\"bad\".to_string()) }\n",
         )?;
 
-        let cmd = CheckCommand::new(Some(temp_dir), true)
+        let cmd = CheckCommand::new(Some(temp_dir.path().to_path_buf()), true)
             .with_fmt(false)
             .with_clippy(false)
             .with_audit(false)
             .with_markdown(false)
             .with_toml(false)
             .with_json(false)
+            .with_api(false)
             .with_fail_on(FailOn::Errors);
 
         assert_that!(cmd.run(), ok(anything()));

@@ -139,14 +139,7 @@ pub fn parse_taplo_output(output: &str, base_dir: &Path) -> Vec<Diagnostic> {
 mod tests {
     use super::*;
     use googletest::prelude::*;
-
-    struct TempDirGuard(PathBuf);
-
-    impl Drop for TempDirGuard {
-        fn drop(&mut self) {
-            drop(fs::remove_dir_all(&self.0));
-        }
-    }
+    use tempfile::tempdir;
 
     #[googletest::test]
     fn parse_taplo_output_parses_unformatted_and_syntax_errors()
@@ -169,16 +162,22 @@ error: invalid.toml: unexpected symbol at line 5
 
     #[googletest::test]
     fn in_process_toml_check_flags_syntax_error() -> Result<(), Box<dyn std::error::Error>> {
-        let temp_dir =
-            std::env::temp_dir().join(format!("test_toml_syntax_{}", std::process::id()));
-        fs::create_dir_all(&temp_dir)?;
-        let _guard = TempDirGuard(temp_dir.clone());
+        let temp_dir = tempdir()?;
 
-        fs::write(temp_dir.join("valid.toml"), "[package]\nname = \"demo\"\n")?;
-        fs::write(temp_dir.join("invalid.toml"), "[package\nname = demo\n")?;
+        fs::write(
+            temp_dir.path().join("valid.toml"),
+            "[package]\nname = \"demo\"\n",
+        )?;
+        fs::write(
+            temp_dir.path().join("invalid.toml"),
+            "[package\nname = demo\n",
+        )?;
 
-        let runner = TomlRunner::new(&temp_dir);
-        let files = vec![temp_dir.join("valid.toml"), temp_dir.join("invalid.toml")];
+        let runner = TomlRunner::new(temp_dir.path());
+        let files = vec![
+            temp_dir.path().join("valid.toml"),
+            temp_dir.path().join("invalid.toml"),
+        ];
         let diags = runner.run_in_process_syntax_check(&files)?;
 
         expect_that!(diags.len(), eq(1));

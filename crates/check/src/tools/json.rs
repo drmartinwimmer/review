@@ -146,14 +146,7 @@ pub fn parse_prettier_json_output(output: &str, base_dir: &Path) -> Vec<Diagnost
 mod tests {
     use super::*;
     use googletest::prelude::*;
-
-    struct TempDirGuard(PathBuf);
-
-    impl Drop for TempDirGuard {
-        fn drop(&mut self) {
-            drop(fs::remove_dir_all(&self.0));
-        }
-    }
+    use tempfile::tempdir;
 
     #[googletest::test]
     fn parse_prettier_json_output_parses_warnings_and_syntax_errors()
@@ -178,16 +171,16 @@ Checking formatting...
 
     #[googletest::test]
     fn in_process_syntax_check_flags_syntax_error() -> Result<(), Box<dyn std::error::Error>> {
-        let temp_dir =
-            std::env::temp_dir().join(format!("test_json_syntax_{}", std::process::id()));
-        fs::create_dir_all(&temp_dir)?;
-        let _guard = TempDirGuard(temp_dir.clone());
+        let temp_dir = tempdir()?;
 
-        fs::write(temp_dir.join("valid.json"), "{\"name\": \"test\"}")?;
-        fs::write(temp_dir.join("invalid.json"), "{ invalid: json }")?;
+        fs::write(temp_dir.path().join("valid.json"), "{\"name\": \"test\"}")?;
+        fs::write(temp_dir.path().join("invalid.json"), "{ invalid: json }")?;
 
-        let runner = JsonRunner::new(&temp_dir);
-        let files = vec![temp_dir.join("valid.json"), temp_dir.join("invalid.json")];
+        let runner = JsonRunner::new(temp_dir.path());
+        let files = vec![
+            temp_dir.path().join("valid.json"),
+            temp_dir.path().join("invalid.json"),
+        ];
         let diags = runner.run_in_process_syntax_check(&files)?;
 
         expect_that!(diags.len(), eq(1));

@@ -17,7 +17,7 @@ thiserror = "2.0"
 googletest = "0.14"
 tempfile = "3"
 code-review-configure-lints = { path = "crates/configure-lints", version = "0.1.0" }
-code-review-check = { path = "crates/check", version = "0.2.0" }
+code-review-check = { path = "crates/check", version = "0.3.0" }
 purist = "0.10.1"
 api-manifest = "0.3.0"
 clapback = "0.2.0"

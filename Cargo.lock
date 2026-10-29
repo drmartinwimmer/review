@@ -387,9 +387,9 @@ dependencies = [
 
 [[package]]
 name = "purist"
-version = "0.10.1"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86beb5e9b577bc84d26a259b8cd896fb230c1a79a550418a8671c14a0bbd9794"
+checksum = "1ca1a564d1e1cc7e77a0293ea0e6d2303b91e833294dc5cfd4fbe5861cdf2d60"
 dependencies = [
  "annotate-snippets",
  "anstyle",
@@ -407,9 +407,9 @@ dependencies = [
 
 [[package]]
 name = "purist-derive"
-version = "0.10.1"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1dd5bbe026fccbae308af01075788559d33774618fdde583ea446f3e687a1ab6"
+checksum = "2cffdd0638086d6334c13145b5a509716b4b810b0c7ab080d79735b4f80912f9"
 dependencies = [
  "proc-macro2",
  "quote",

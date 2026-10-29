@@ -74,9 +74,9 @@ dependencies = [
 
 [[package]]
 name = "api-manifest"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13ffb19d002c111a36360dc4d135f4231bc3d4e861f55e89be628e01944965d6"
+checksum = "88f93687efa09ac087c1675f195bd393b1336482fe6650c3eb0c87cb516257fd"
 dependencies = [
  "api-manifest-derive",
  "clap",
@@ -90,9 +90,9 @@ dependencies = [
 
 [[package]]
 name = "api-manifest-derive"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a5e63e36a9ea0089182bcbb0af79403fec830f67f6cdd87206e3a86da5d466b"
+checksum = "ebad90f802d02dd36a38d88f74dca3324b128b97822299307cc3558effda02c1"
 dependencies = [
  "proc-macro2",
  "quote",

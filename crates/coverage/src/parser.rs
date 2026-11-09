@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::io::Write;
 
 /// Coverage metric counters and percentage for a specific dimension (lines, functions, branches, regions).
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 pub struct MetricSummary {
     /// Total number of coverable items.
     pub count: u64,
@@ -13,7 +13,7 @@ pub struct MetricSummary {
 }
 
 /// Aggregated coverage percentages and counts across lines, functions, branches, and regions.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 pub struct CoverageSummary {
     /// Line coverage metrics.
     pub lines: MetricSummary,

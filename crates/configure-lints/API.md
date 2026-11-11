@@ -11,7 +11,7 @@
 
 ### Enums
 
-- `pub enum CargoTomlError { ManifestNotFound { path: PathBuf }, Io { source: std :: io :: Error }, Parse { source: TomlError }, InvalidStructure { reason: String } }` — _Errors that can occur during Cargo.toml inspection or modification._
+- `pub enum CargoTomlError { ManifestNotFound { path: PathBuf }, Io { source: std :: io :: Error }, Parse { source: TomlError }, NotATable { table: & 'static str }, LintsUnderPackage, MissingWorkspaceAndPackage }` — _Errors that can occur during Cargo.toml inspection or modification._
 - `pub enum LintProfile { Strict, Standard }` — _Profile defining which preset of Clippy lints to inject._
 
 ### Functions

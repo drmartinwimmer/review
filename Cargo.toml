@@ -78,6 +78,7 @@ manual_let_else = "warn"
 match_same_arms = "warn"
 redundant_closure_for_method_calls = "warn"
 map_unwrap_or = "warn"
+redundant_clone = "warn"
 
 # Don't `allow` Your Way Around These Lints - every suppression must be
 # a deliberate #[expect(..., reason = "…")] rather than a silent #[allow]
@@ -87,3 +88,6 @@ allow_attributes_without_reason = "warn"
 # Maintainability & Complexity - keep functions easy to understand
 cognitive_complexity = "warn"
 too_many_lines = "warn"
+
+[workspace.lints.rust]
+missing_copy_implementations = "warn"

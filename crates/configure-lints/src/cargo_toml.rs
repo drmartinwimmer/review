@@ -1,42 +1,11 @@
-use clap::ValueEnum;
-use serde::{Deserialize, Serialize};
+pub use crate::presets::LintProfile;
+use crate::presets::{LINT_CATEGORIES, LintCategory, RUST_LINTS};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use toml_edit::{Item, Table, TomlError, Value, value};
 
-/// Profile defining which preset of Clippy lints to inject.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum LintProfile {
-    /// Comprehensive safety, robustness, memory safety, numerics, suppression hygiene, and complexity rules (49 lints).
-    #[default]
-    Strict,
-    /// Standard baseline safety and robustness rules (46 lints), omitting the strictest slicing
-    /// and suppression bans (`string_slice`, `indexing_slicing`, and `allow_attributes`).
-    Standard,
-}
-
-impl LintProfile {
-    pub(crate) fn includes_lint(&self, lint: &str) -> bool {
-        match self {
-            Self::Strict => true,
-            Self::Standard => !matches!(
-                lint,
-                "string_slice" | "indexing_slicing" | "allow_attributes"
-            ),
-        }
-    }
-
-    pub(crate) fn expected_count(&self) -> usize {
-        match self {
-            Self::Strict => 49,
-            Self::Standard => 46,
-        }
-    }
-}
-
 /// Result metadata returned after modifying or inspecting a Cargo.toml file.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ConfigureResult {
     /// True if the file contents were modified on disk; false if already up-to-date or no lints removed.
     pub modified: bool,
@@ -64,156 +33,88 @@ pub enum CargoTomlError {
     },
 
     /// Returned when an expected table (such as `[workspace]`, `[package]`, `[lints]`,
-    /// or `[lints.clippy]`) exists in the document but is a scalar or array rather than
-    /// a table or inline table.
-    #[error("Invalid Cargo.toml structure: {reason}")]
-    InvalidStructure { reason: String },
+    /// `[lints.rust]`, or `[lints.clippy]`) exists in the document but is a scalar or
+    /// array rather than a table or inline table.
+    #[error("Invalid Cargo.toml structure: '{table}' is not a table")]
+    NotATable { table: &'static str },
+
+    /// Returned when `[package.lints]` is defined instead of root-level `[lints]`.
+    #[error("Invalid Cargo.toml structure: 'lints' must be at root level, not under [package]")]
+    LintsUnderPackage,
+
+    /// Returned when the manifest contains neither `[workspace]` nor `[package]`.
+    #[error("Invalid Cargo.toml structure: Manifest contains neither [workspace] nor [package]")]
+    MissingWorkspaceAndPackage,
 }
 
-struct LintCategory {
-    title: &'static str,
-    description: &'static str,
-    lints: &'static [&'static str],
+#[derive(Clone, Copy)]
+enum LintsScope {
+    Workspace,
+    Crate,
 }
 
-const LINT_CATEGORIES: &[LintCategory] = &[
-    LintCategory {
-        title: "Don't Panic",
-        description: "prevent panics from unwraps and unsafe slicing or indexing",
-        lints: &[
-            "string_slice",
-            "indexing_slicing",
-            "unwrap_used",
-            "panic",
-            "todo",
-            "unimplemented",
-            "unreachable",
-            "get_unwrap",
-            "unwrap_in_result",
-            "unchecked_time_subtraction",
-            "panic_in_result_fn",
-        ],
-    },
-    LintCategory {
-        title: "Don't Fail Silently",
-        description: "prevent dropped futures and swallowed errors",
-        lints: &[
-            "let_underscore_future",
-            "let_underscore_must_use",
-            "unused_result_ok",
-            "map_err_ignore",
-            "assertions_on_result_states",
-            "ignored_unit_patterns",
-        ],
-    },
-    LintCategory {
-        title: "Don't Do Unsafe Things with Memory",
-        description: "",
-        lints: &[
-            "mem_forget",
-            "undocumented_unsafe_blocks",
-            "multiple_unsafe_ops_per_block",
-            "unnecessary_safety_doc",
-            "unnecessary_safety_comment",
-            "large_stack_arrays",
-        ],
-    },
-    LintCategory {
-        title: "Don't Do Potentially Incorrect Things with Numbers",
-        description: "",
-        lints: &[
-            "float_cmp",
-            "float_cmp_const",
-            "lossy_float_literal",
-            "cast_sign_loss",
-            "cast_possible_truncation",
-            "cast_possible_wrap",
-            "cast_precision_loss",
-            "checked_conversions",
-            "invalid_upcast_comparisons",
-        ],
-    },
-    LintCategory {
-        title: "Don't Do Bad Things That are Easy to Avoid",
-        description: "",
-        lints: &[
-            "rc_mutex",
-            "debug_assert_with_mut_call",
-            "iter_not_returning_iterator",
-            "expl_impl_clone_on_copy",
-            "infallible_try_from",
-            "dbg_macro",
-            "exit",
-            "infinite_loop",
-            "large_types_passed_by_value",
-            "manual_let_else",
-            "match_same_arms",
-            "redundant_closure_for_method_calls",
-            "map_unwrap_or",
-        ],
-    },
-    LintCategory {
-        title: "Don't `allow` Your Way Around These Lints",
-        description: "every suppression must be a deliberate #[expect(..., reason = \"…\")] rather than a silent #[allow]",
-        lints: &["allow_attributes", "allow_attributes_without_reason"],
-    },
-    LintCategory {
-        title: "Maintainability & Complexity",
-        description: "keep functions easy to understand",
-        lints: &["cognitive_complexity", "too_many_lines"],
-    },
-];
+impl LintsScope {
+    const fn rust_table(self) -> &'static str {
+        match self {
+            Self::Workspace => "workspace.lints.rust",
+            Self::Crate => "lints.rust",
+        }
+    }
+
+    const fn clippy_table(self) -> &'static str {
+        match self {
+            Self::Workspace => "workspace.lints.clippy",
+            Self::Crate => "lints.clippy",
+        }
+    }
+}
+
+fn validate_lints_subtables(
+    lints: &dyn toml_edit::TableLike,
+    scope: LintsScope,
+) -> Result<(), CargoTomlError> {
+    for (subtable, table_path) in [
+        ("rust", scope.rust_table()),
+        ("clippy", scope.clippy_table()),
+    ] {
+        if let Some(item) = lints.get(subtable)
+            && item.as_table_like().is_none()
+        {
+            return Err(CargoTomlError::NotATable { table: table_path });
+        }
+    }
+    Ok(())
+}
 
 fn validate_document_structure(doc: &toml_edit::DocumentMut) -> Result<(), CargoTomlError> {
     if let Some(item) = doc.get("workspace") {
         let ws = item
             .as_table_like()
-            .ok_or_else(|| CargoTomlError::InvalidStructure {
-                reason: "'workspace' is not a table".to_string(),
-            })?;
+            .ok_or(CargoTomlError::NotATable { table: "workspace" })?;
         if let Some(lints_item) = ws.get("lints") {
-            let lints =
-                lints_item
-                    .as_table_like()
-                    .ok_or_else(|| CargoTomlError::InvalidStructure {
-                        reason: "'workspace.lints' is not a table".to_string(),
-                    })?;
-            if let Some(clippy_item) = lints.get("clippy")
-                && clippy_item.as_table_like().is_none()
-            {
-                return Err(CargoTomlError::InvalidStructure {
-                    reason: "'workspace.lints.clippy' is not a table".to_string(),
-                });
-            }
+            let lints = lints_item
+                .as_table_like()
+                .ok_or(CargoTomlError::NotATable {
+                    table: "workspace.lints",
+                })?;
+            validate_lints_subtables(lints, LintsScope::Workspace)?;
         }
     }
 
     if let Some(item) = doc.get("package") {
         let pkg = item
             .as_table_like()
-            .ok_or_else(|| CargoTomlError::InvalidStructure {
-                reason: "'package' is not a table".to_string(),
-            })?;
+            .ok_or(CargoTomlError::NotATable { table: "package" })?;
         if pkg.get("lints").is_some() {
-            return Err(CargoTomlError::InvalidStructure {
-                reason: "'lints' must be at root level, not under [package]".to_string(),
-            });
+            return Err(CargoTomlError::LintsUnderPackage);
         }
     }
 
     if let Some(item) = doc.get("lints") {
         let lints = item
             .as_table_like()
-            .ok_or_else(|| CargoTomlError::InvalidStructure {
-                reason: "'lints' is not a table".to_string(),
-            })?;
-        if let Some(clippy_item) = lints.get("clippy")
-            && clippy_item.as_table_like().is_none()
-        {
-            return Err(CargoTomlError::InvalidStructure {
-                reason: "'lints.clippy' is not a table".to_string(),
-            });
-        }
+            .ok_or(CargoTomlError::NotATable { table: "lints" })?;
+        validate_lints_subtables(lints, LintsScope::Crate)?;
     }
 
     Ok(())
@@ -324,6 +225,14 @@ fn update_existing_clippy_table(table: &mut toml_edit::Table, profile: LintProfi
     );
 }
 
+fn populate_rust_table(table: &mut toml_edit::Table, profile: LintProfile) {
+    for lint in RUST_LINTS {
+        if profile.includes_lint(lint) {
+            set_lint_to_warn(table, lint);
+        }
+    }
+}
+
 fn populate_clippy_table(table: &mut toml_edit::Table, profile: LintProfile) {
     if table.is_empty() {
         populate_empty_clippy_table(table, profile);
@@ -344,6 +253,44 @@ fn set_lint_to_warn(table: &mut Table, lint: &str) {
     }
 }
 
+fn populate_lints_subtables(
+    lints_table: &mut Table,
+    scope: LintsScope,
+    profile: LintProfile,
+) -> Result<(), CargoTomlError> {
+    if !lints_table.contains_key("rust") {
+        let mut rust_table = Table::new();
+        rust_table.set_implicit(false);
+        lints_table.insert("rust", Item::Table(rust_table));
+    }
+
+    let rust_table = lints_table
+        .get_mut("rust")
+        .and_then(|i| i.as_table_mut())
+        .ok_or(CargoTomlError::NotATable {
+            table: scope.rust_table(),
+        })?;
+
+    populate_rust_table(rust_table, profile);
+
+    if !lints_table.contains_key("clippy") {
+        let mut clippy_table = Table::new();
+        clippy_table.set_implicit(false);
+        lints_table.insert("clippy", Item::Table(clippy_table));
+    }
+
+    let clippy_table = lints_table
+        .get_mut("clippy")
+        .and_then(|i| i.as_table_mut())
+        .ok_or(CargoTomlError::NotATable {
+            table: scope.clippy_table(),
+        })?;
+
+    populate_clippy_table(clippy_table, profile);
+
+    Ok(())
+}
+
 fn configure_workspace_lints(
     doc: &mut toml_edit::DocumentMut,
     profile: LintProfile,
@@ -352,9 +299,7 @@ fn configure_workspace_lints(
     let ws = doc
         .get_mut("workspace")
         .and_then(|i| i.as_table_mut())
-        .ok_or_else(|| CargoTomlError::InvalidStructure {
-            reason: "'workspace' is not a table".to_string(),
-        })?;
+        .ok_or(CargoTomlError::NotATable { table: "workspace" })?;
 
     if !ws.contains_key("lints") {
         let mut lints_table = Table::new();
@@ -362,27 +307,14 @@ fn configure_workspace_lints(
         ws.insert("lints", Item::Table(lints_table));
     }
 
-    let ws_lints = ws
-        .get_mut("lints")
-        .and_then(|i| i.as_table_mut())
-        .ok_or_else(|| CargoTomlError::InvalidStructure {
-            reason: "'workspace.lints' is not a table".to_string(),
-        })?;
+    let ws_lints =
+        ws.get_mut("lints")
+            .and_then(|i| i.as_table_mut())
+            .ok_or(CargoTomlError::NotATable {
+                table: "workspace.lints",
+            })?;
 
-    if !ws_lints.contains_key("clippy") {
-        let mut clippy_table = Table::new();
-        clippy_table.set_implicit(false);
-        ws_lints.insert("clippy", Item::Table(clippy_table));
-    }
-
-    let clippy_table = ws_lints
-        .get_mut("clippy")
-        .and_then(|i| i.as_table_mut())
-        .ok_or_else(|| CargoTomlError::InvalidStructure {
-            reason: "'workspace.lints.clippy' is not a table".to_string(),
-        })?;
-
-    populate_clippy_table(clippy_table, profile);
+    populate_lints_subtables(ws_lints, LintsScope::Workspace, profile)?;
 
     if has_package {
         ensure_root_lints_workspace_inheritance(doc)?;
@@ -394,22 +326,10 @@ fn configure_workspace_lints(
 fn ensure_root_lints_workspace_inheritance(
     doc: &mut toml_edit::DocumentMut,
 ) -> Result<(), CargoTomlError> {
-    if !doc.contains_key("lints") {
-        let mut lints_table = Table::new();
-        lints_table.insert("workspace", value(true));
-        doc.insert("lints", Item::Table(lints_table));
-    } else {
-        let lints_item = doc
-            .get_mut("lints")
-            .ok_or_else(|| CargoTomlError::InvalidStructure {
-                reason: "Missing lints table".to_string(),
-            })?;
-        let lints_table =
-            lints_item
-                .as_table_mut()
-                .ok_or_else(|| CargoTomlError::InvalidStructure {
-                    reason: "'lints' is not a table".to_string(),
-                })?;
+    if let Some(lints_item) = doc.get_mut("lints") {
+        let lints_table = lints_item
+            .as_table_mut()
+            .ok_or(CargoTomlError::NotATable { table: "lints" })?;
         let is_ws_true = lints_table
             .get("workspace")
             .and_then(|v| v.as_value())
@@ -418,6 +338,10 @@ fn ensure_root_lints_workspace_inheritance(
         if !is_ws_true {
             lints_table.insert("workspace", value(true));
         }
+    } else {
+        let mut lints_table = Table::new();
+        lints_table.insert("workspace", value(true));
+        doc.insert("lints", Item::Table(lints_table));
     }
     Ok(())
 }
@@ -435,25 +359,9 @@ fn configure_crate_lints(
     let lints_table = doc
         .get_mut("lints")
         .and_then(|i| i.as_table_mut())
-        .ok_or_else(|| CargoTomlError::InvalidStructure {
-            reason: "'lints' is not a table".to_string(),
-        })?;
+        .ok_or(CargoTomlError::NotATable { table: "lints" })?;
 
-    if !lints_table.contains_key("clippy") {
-        let mut clippy_table = Table::new();
-        clippy_table.set_implicit(false);
-        lints_table.insert("clippy", Item::Table(clippy_table));
-    }
-
-    let clippy_table = lints_table
-        .get_mut("clippy")
-        .and_then(|i| i.as_table_mut())
-        .ok_or_else(|| CargoTomlError::InvalidStructure {
-            reason: "'lints.clippy' is not a table".to_string(),
-        })?;
-
-    populate_clippy_table(clippy_table, profile);
-    Ok(())
+    populate_lints_subtables(lints_table, LintsScope::Crate, profile)
 }
 
 /// Configures strict Clippy lints in the specified Cargo.toml manifest.
@@ -476,9 +384,7 @@ pub fn configure_lints(
     let has_package = doc.contains_key("package");
 
     if !has_workspace && !has_package {
-        return Err(CargoTomlError::InvalidStructure {
-            reason: "Manifest contains neither [workspace] nor [package]".to_string(),
-        });
+        return Err(CargoTomlError::MissingWorkspaceAndPackage);
     }
 
     if has_workspace {
@@ -500,6 +406,38 @@ pub fn configure_lints(
     })
 }
 
+fn remove_configured_rust_lints(lints_table: &mut Table) -> usize {
+    let mut removed = 0;
+    let should_remove_rust_table = if let Some(rust_item) = lints_table.get_mut("rust")
+        && let Some(rust_table) = rust_item.as_table_like_mut()
+    {
+        for lint in RUST_LINTS {
+            if rust_table.remove(lint).is_some() {
+                removed += 1;
+            }
+        }
+        rust_table.is_empty()
+    } else {
+        false
+    };
+
+    if should_remove_rust_table {
+        lints_table.remove("rust");
+    }
+
+    removed
+}
+
+fn remove_from_lints_table(lints_table: &mut Table) -> usize {
+    let mut removed_count = remove_configured_rust_lints(lints_table);
+    if let Some(clippy_item) = lints_table.remove("clippy")
+        && let Some(clippy_table) = clippy_item.as_table_like()
+    {
+        removed_count += clippy_table.iter().count();
+    }
+    removed_count
+}
+
 /// Removes configured Clippy lints and associated tables from the specified Cargo.toml manifest.
 pub fn remove_lints(manifest_path: &Path) -> Result<ConfigureResult, CargoTomlError> {
     if !manifest_path.exists() {
@@ -515,31 +453,23 @@ pub fn remove_lints(manifest_path: &Path) -> Result<ConfigureResult, CargoTomlEr
 
     let mut removed_count = 0;
 
-    // 1. Check [lints.clippy]
+    // 1. Check [lints]
     if let Some(lints_item) = doc.get_mut("lints")
         && let Some(lints_table) = lints_item.as_table_mut()
     {
-        if let Some(clippy_item) = lints_table.remove("clippy")
-            && let Some(clippy_table) = clippy_item.as_table_like()
-        {
-            removed_count += clippy_table.iter().count();
-        }
+        removed_count += remove_from_lints_table(lints_table);
         if lints_table.is_empty() {
             doc.remove("lints");
         }
     }
 
-    // 2. Check [workspace.lints.clippy]
+    // 2. Check [workspace.lints]
     if let Some(ws_item) = doc.get_mut("workspace")
         && let Some(ws_table) = ws_item.as_table_mut()
         && let Some(ws_lints_item) = ws_table.get_mut("lints")
         && let Some(ws_lints_table) = ws_lints_item.as_table_mut()
     {
-        if let Some(clippy_item) = ws_lints_table.remove("clippy")
-            && let Some(clippy_table) = clippy_item.as_table_like()
-        {
-            removed_count += clippy_table.iter().count();
-        }
+        removed_count += remove_from_lints_table(ws_lints_table);
         if ws_lints_table.is_empty() {
             ws_table.remove("lints");
         }
@@ -616,7 +546,7 @@ serde = "1.0" # inline dep comment
         let manifest = TempManifest::new(original)?;
         let result = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(result.modified, is_true());
-        expect_that!(result.lints_configured, eq(49));
+        expect_that!(result.lints_configured, eq(51));
 
         let modified_content = manifest.read()?;
         expect_that!(modified_content, contains_substring("# Top-level comment"));
@@ -636,6 +566,11 @@ serde = "1.0" # inline dep comment
             modified_content,
             contains_substring("# Trailing comment at end")
         );
+        expect_that!(modified_content, contains_substring("[lints.rust]"));
+        expect_that!(
+            modified_content,
+            contains_substring("missing_copy_implementations = \"warn\"")
+        );
         expect_that!(modified_content, contains_substring("[lints.clippy]"));
         expect_that!(
             modified_content,
@@ -653,13 +588,13 @@ version = "0.1.0"
         let manifest = TempManifest::new(initial)?;
         let res1 = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(res1.modified, is_true());
-        expect_that!(res1.lints_configured, eq(49));
+        expect_that!(res1.lints_configured, eq(51));
 
         let content_after_run1 = manifest.read()?;
 
         let res2 = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(res2.modified, is_false());
-        expect_that!(res2.lints_configured, eq(49));
+        expect_that!(res2.lints_configured, eq(51));
 
         let content_after_run2 = manifest.read()?;
         expect_that!(content_after_run1, eq(&content_after_run2));
@@ -675,9 +610,10 @@ members = ["crates/*"]
         let manifest = TempManifest::new(initial)?;
         let res = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(res.modified, is_true());
-        expect_that!(res.lints_configured, eq(49));
+        expect_that!(res.lints_configured, eq(51));
 
         let content = manifest.read()?;
+        expect_that!(content, contains_substring("[workspace.lints.rust]"));
         expect_that!(content, contains_substring("[workspace.lints.clippy]"));
         expect_that!(content, not(contains_substring("\n[lints]")));
         expect_that!(content, not(contains_substring("workspace = true")));
@@ -697,9 +633,10 @@ members = ["crates/*"]
         let manifest = TempManifest::new(initial)?;
         let res = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(res.modified, is_true());
-        expect_that!(res.lints_configured, eq(49));
+        expect_that!(res.lints_configured, eq(51));
 
         let content = manifest.read()?;
+        expect_that!(content, contains_substring("[workspace.lints.rust]"));
         expect_that!(content, contains_substring("[workspace.lints.clippy]"));
         expect_that!(content, contains_substring("workspace = true"));
         Ok(())
@@ -715,9 +652,10 @@ version = "0.1.0"
         let manifest = TempManifest::new(initial)?;
         let res = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(res.modified, is_true());
-        expect_that!(res.lints_configured, eq(49));
+        expect_that!(res.lints_configured, eq(51));
 
         let content = manifest.read()?;
+        expect_that!(content, contains_substring("[lints.rust]"));
         expect_that!(content, contains_substring("[lints.clippy]"));
         expect_that!(content, not(contains_substring("[workspace")));
         Ok(())
@@ -732,81 +670,36 @@ version = "0.1.0"
 "#;
         let manifest_strict = TempManifest::new(initial)?;
         let res_strict = configure_lints(&manifest_strict.path, LintProfile::Strict)?;
-        expect_that!(res_strict.lints_configured, eq(49));
+        expect_that!(res_strict.lints_configured, eq(51));
         let content_strict = manifest_strict.read()?;
-        expect_that!(
-            content_strict,
-            contains_substring("string_slice = \"warn\"")
-        );
-        expect_that!(
-            content_strict,
-            contains_substring("indexing_slicing = \"warn\"")
-        );
-        expect_that!(
-            content_strict,
-            contains_substring("allow_attributes = \"warn\"")
-        );
-        expect_that!(
-            content_strict,
-            contains_substring("cognitive_complexity = \"warn\"")
-        );
-        expect_that!(
-            content_strict,
-            contains_substring("too_many_lines = \"warn\"")
-        );
-        expect_that!(
-            content_strict,
-            contains_substring("cast_possible_truncation = \"warn\"")
-        );
-        expect_that!(
-            content_strict,
-            contains_substring("cast_possible_wrap = \"warn\"")
-        );
-        expect_that!(
-            content_strict,
-            contains_substring("cast_precision_loss = \"warn\"")
-        );
-        expect_that!(
-            content_strict,
-            contains_substring("checked_conversions = \"warn\"")
-        );
-        expect_that!(
-            content_strict,
-            contains_substring("ignored_unit_patterns = \"warn\"")
-        );
-        expect_that!(
-            content_strict,
-            contains_substring("large_stack_arrays = \"warn\"")
-        );
-        expect_that!(content_strict, contains_substring("exit = \"warn\""));
-        expect_that!(
-            content_strict,
-            contains_substring("infinite_loop = \"warn\"")
-        );
-        expect_that!(
-            content_strict,
-            contains_substring("large_types_passed_by_value = \"warn\"")
-        );
-        expect_that!(
-            content_strict,
-            contains_substring("manual_let_else = \"warn\"")
-        );
-        expect_that!(
-            content_strict,
-            contains_substring("match_same_arms = \"warn\"")
-        );
-        expect_that!(
-            content_strict,
-            contains_substring("redundant_closure_for_method_calls = \"warn\"")
-        );
-        expect_that!(
-            content_strict,
-            contains_substring("map_unwrap_or = \"warn\"")
-        );
+        for expected in [
+            "missing_copy_implementations = \"warn\"",
+            "string_slice = \"warn\"",
+            "indexing_slicing = \"warn\"",
+            "allow_attributes = \"warn\"",
+            "cognitive_complexity = \"warn\"",
+            "too_many_lines = \"warn\"",
+            "cast_possible_truncation = \"warn\"",
+            "cast_possible_wrap = \"warn\"",
+            "cast_precision_loss = \"warn\"",
+            "checked_conversions = \"warn\"",
+            "ignored_unit_patterns = \"warn\"",
+            "large_stack_arrays = \"warn\"",
+            "exit = \"warn\"",
+            "infinite_loop = \"warn\"",
+            "large_types_passed_by_value = \"warn\"",
+            "manual_let_else = \"warn\"",
+            "match_same_arms = \"warn\"",
+            "redundant_closure_for_method_calls = \"warn\"",
+            "map_unwrap_or = \"warn\"",
+            "redundant_clone = \"warn\"",
+        ] {
+            expect_that!(content_strict, contains_substring(expected));
+        }
 
         let manifest_standard = TempManifest::new(initial)?;
         let res_standard = configure_lints(&manifest_standard.path, LintProfile::Standard)?;
-        expect_that!(res_standard.lints_configured, eq(46));
+        expect_that!(res_standard.lints_configured, eq(48));
         let content_standard = manifest_standard.read()?;
         expect_that!(
             content_standard,
@@ -828,6 +721,14 @@ version = "0.1.0"
             content_standard,
             contains_substring("unwrap_used = \"warn\"")
         );
+        expect_that!(
+            content_standard,
+            contains_substring("missing_copy_implementations = \"warn\"")
+        );
+        expect_that!(
+            content_standard,
+            contains_substring("redundant_clone = \"warn\"")
+        );
         Ok(())
     }
 
@@ -843,10 +744,14 @@ version = "0.1.0"
 
         let remove_res = remove_lints(&manifest.path)?;
         expect_that!(remove_res.modified, is_true());
-        expect_that!(remove_res.lints_configured, eq(49));
+        expect_that!(remove_res.lints_configured, eq(51));
 
         let content_after_remove = manifest.read()?;
         expect_that!(content_after_remove, not(contains_substring("[lints]")));
+        expect_that!(
+            content_after_remove,
+            not(contains_substring("[lints.rust]"))
+        );
         expect_that!(
             content_after_remove,
             not(contains_substring("[lints.clippy]"))
@@ -877,13 +782,17 @@ unsafe_code = "forbid"
 
         let remove_res = remove_lints(&manifest.path)?;
         expect_that!(remove_res.modified, is_true());
-        expect_that!(remove_res.lints_configured, eq(49));
+        expect_that!(remove_res.lints_configured, eq(51));
 
         let content_after_remove = manifest.read()?;
         expect_that!(content_after_remove, contains_substring("[lints.rust]"));
         expect_that!(
             content_after_remove,
             contains_substring("unsafe_code = \"forbid\"")
+        );
+        expect_that!(
+            content_after_remove,
+            not(contains_substring("missing_copy_implementations"))
         );
         expect_that!(
             content_after_remove,
@@ -927,11 +836,9 @@ version = "0.1.0"
 "#;
         let manifest1 = TempManifest::new(invalid_lints)?;
         match configure_lints(&manifest1.path, LintProfile::Strict) {
-            Err(CargoTomlError::InvalidStructure { .. }) => {}
+            Err(CargoTomlError::NotATable { table: "lints" }) => {}
             other => {
-                return Err(
-                    format!("Expected InvalidStructure for scalar lints, got {other:?}").into(),
-                );
+                return Err(format!("Expected NotATable for scalar lints, got {other:?}").into());
             }
         }
 
@@ -939,12 +846,11 @@ version = "0.1.0"
 "#;
         let manifest2 = TempManifest::new(invalid_ws)?;
         match configure_lints(&manifest2.path, LintProfile::Strict) {
-            Err(CargoTomlError::InvalidStructure { .. }) => {}
+            Err(CargoTomlError::NotATable { table: "workspace" }) => {}
             other => {
-                return Err(format!(
-                    "Expected InvalidStructure for scalar workspace, got {other:?}"
-                )
-                .into());
+                return Err(
+                    format!("Expected NotATable for scalar workspace, got {other:?}").into(),
+                );
             }
         }
         Ok(())
@@ -986,7 +892,7 @@ members = ["crates/*"]
 
         let remove_res = remove_lints(&manifest.path)?;
         expect_that!(remove_res.modified, is_true());
-        expect_that!(remove_res.lints_configured, eq(49));
+        expect_that!(remove_res.lints_configured, eq(51));
 
         let content_after = manifest.read()?;
         expect_that!(content_after, not(contains_substring("[workspace.lints]")));
@@ -1020,7 +926,7 @@ members = ["crates/*"]
 
         let remove_res = remove_lints(&manifest.path)?;
         expect_that!(remove_res.modified, is_true());
-        expect_that!(remove_res.lints_configured, eq(49));
+        expect_that!(remove_res.lints_configured, eq(51));
 
         let content_after = manifest.read()?;
         expect_that!(content_after, not(contains_substring("[workspace.lints]")));
@@ -1046,7 +952,7 @@ version = "0.1.0"
 
         let res_standard = configure_lints(&manifest.path, LintProfile::Standard)?;
         expect_that!(res_standard.modified, is_true());
-        expect_that!(res_standard.lints_configured, eq(46));
+        expect_that!(res_standard.lints_configured, eq(48));
 
         let content_standard = manifest.read()?;
         expect_that!(content_standard, not(contains_substring("string_slice")));

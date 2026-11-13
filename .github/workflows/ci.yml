@@ -96,19 +96,44 @@ jobs:
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v23
 
-      - name: Cache Nix builds
-        uses: DeterminateSystems/magic-nix-cache-action@v15
-
       - name: Check Nix flake
         run: nix flake check
 
       - name: Build Nix package
         run: nix build
 
+      - name: Verify direnv in standard checkout and secondary jj workspace
+        run: |
+          nix shell --flake-registry "" --inputs-from . nixpkgs#direnv --command bash -euo pipefail <<'EOF'
+          expected_channel=$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)
+          [ -n "$expected_channel" ]
+
+          verify_direnv() {
+            local dir="$1"
+            direnv allow "$dir"
+            EXPECTED_CHANNEL="$expected_channel" direnv exec "$dir" bash -euo pipefail -c '
+              [ -n "${IN_NIX_SHELL:-}" ]
+              rustc --version | grep -E "^rustc ${EXPECTED_CHANNEL}(\.| )"
+              cargo --version
+              cargo-audit --version
+              taplo --version
+              prettier --version
+            '
+          }
+
+          verify_direnv .
+
+          mkdir -p .workspaces/ci-test
+          trap 'rm -rf .workspaces' EXIT
+          cp .envrc flake.nix flake.lock rust-toolchain.toml .workspaces/ci-test/
+          [ ! -e .workspaces/ci-test/.git ]
+          verify_direnv .workspaces/ci-test
+          EOF
+
   auto-merge:
     name: Auto-Merge Dependabot PR
     needs: [lint, test, nix]
-    if: github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -120,14 +145,40 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Auto-merge Rust minor and patch updates
-        if: >-
-          steps.metadata.outputs.package-ecosystem == 'cargo' &&
-          (steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
-           steps.metadata.outputs.update-type == 'version-update:semver-patch')
+      - name: Auto-merge patch, minor, and Nix flake updates
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+          UPDATED_DEPS_JSON: ${{ steps.metadata.outputs.updated-dependencies-json }}
         run: |
-          gh pr review --approve "$PR_URL"
-          gh pr merge --merge "$PR_URL" || gh pr merge --auto --merge "$PR_URL"
+          SHOULD_MERGE=false
+          if [ "$UPDATE_TYPE" = "version-update:semver-patch" ] || [ "$UPDATE_TYPE" = "version-update:semver-minor" ]; then
+            SHOULD_MERGE=true
+          elif echo "$UPDATED_DEPS_JSON" | jq -e '
+            length > 0 and all(
+              .updateType == "version-update:semver-patch"
+              or .updateType == "version-update:semver-minor"
+              or ((.newVersion // "") | test("^[0-9a-f]{40}$"))
+            )
+          ' > /dev/null; then
+            SHOULD_MERGE=true
+          fi
+
+          if [ "$SHOULD_MERGE" = "true" ]; then
+            gh pr review --approve "$PR_URL"
+            if ! gh pr merge --auto --merge "$PR_URL"; then
+              for attempt in 1 2 3; do
+                if gh pr merge --merge "$PR_URL"; then
+                  break
+                fi
+                if [ "$attempt" -lt 3 ]; then
+                  sleep 5
+                else
+                  exit 1
+                fi
+              done
+            fi
+          else
+            echo "Skipping auto-merge for update type: $UPDATE_TYPE"
+          fi

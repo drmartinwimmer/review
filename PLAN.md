@@ -457,9 +457,9 @@ When an agent reviews code, it dispatches specialized review subagents in parall
 ### Milestone 6: Release Pipeline & Automated SemVer Verification
 
 - **Description:** Configure Release Please (`release-please-config.json`, `.release-please-manifest.json`, `.github/workflows/release.yml`) and integrate `cargo-semver-checks` into the CI pipeline (evaluating feature PRs against `origin/main` and release candidate PRs against crates.io).
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Target Completion Date:** 2026-10-21
-- **Actual Completion Date:** -
+- **Actual Completion Date:** 2026-11-13
 - **Dependencies:** Milestone 5
 - **Tasks File:** `plan/M6.md`
 - **Feedback File:** `plan/FEEDBACK_M6.md`
@@ -629,11 +629,11 @@ When an agent reviews code, it dispatches specialized review subagents in parall
   - Add `.release-please-manifest.json` initializing workspace crate versions.
   - Update `.github/workflows/release.yml` with `googleapis/release-please-action@v5` and topological `cargo publish`.
   - Describe Jujutsu change: `jj describe -m "ci(release): configure Release Please manifests and release workflow"`
-- [ ] **M6-T2: SemVer CI Verification with cargo-semver-checks**
+- [x] **M6-T2: SemVer CI Verification with cargo-semver-checks**
   - Update `.github/workflows/ci.yml` to install `cargo-semver-checks`.
   - Add step verifying PR commits against `origin/main`.
   - Add step verifying release candidate PRs against baseline releases.
-  - Describe Jujutsu change: `jj describe -m "plan-M6-T2: ci: add cargo-semver-checks verification steps to CI workflow"`
+  - Describe Jujutsu change: `jj describe -m "ci(semver): add cargo-semver-checks verification steps to CI workflow"`
 
 ### Milestone 7: Feedback Distillation & Reflection Skill
 

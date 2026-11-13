@@ -621,9 +621,9 @@ When an agent reviews code, it dispatches specialized review subagents in parall
 
 ### Milestone 6: Release Pipeline & Automated SemVer Verification
 
-- [ ] **M6-T0: Release Pipeline Specification (`docs/release_pipeline.spec.md`)**
+- [x] **M6-T0: Release Pipeline Specification (`docs/release_pipeline.spec.md`, `plan/M6.md`, `plan/FEEDBACK_M6.md`)**
   - Document Release Please configuration, conventional commit contracts, and `cargo-semver-checks` gating invariants.
-  - Describe Jujutsu change: `jj describe -m "plan-M6-T0: docs: add spec for release pipeline and semver verification"`
+  - Describe Jujutsu change: `jj describe -m "docs(release): add spec for release pipeline and semver verification"`
 - [ ] **M6-T1: Release Please Manifests & Action Configuration**
   - Add `release-please-config.json` configuring Rust release type and extra files (`flake.nix`).
   - Add `.release-please-manifest.json` initializing root version `0.1.0`.

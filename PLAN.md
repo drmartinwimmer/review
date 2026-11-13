@@ -624,11 +624,11 @@ When an agent reviews code, it dispatches specialized review subagents in parall
 - [x] **M6-T0: Release Pipeline Specification (`docs/release_pipeline.spec.md`, `plan/M6.md`, `plan/FEEDBACK_M6.md`)**
   - Document Release Please configuration, conventional commit contracts, and `cargo-semver-checks` gating invariants.
   - Describe Jujutsu change: `jj describe -m "docs(release): add spec for release pipeline and semver verification"`
-- [ ] **M6-T1: Release Please Manifests & Action Configuration**
+- [x] **M6-T1: Release Please Manifests & Action Configuration**
   - Add `release-please-config.json` configuring Rust release type and extra files (`flake.nix`).
-  - Add `.release-please-manifest.json` initializing root version `0.1.0`.
-  - Create `.github/workflows/release.yml` with `googleapis/release-please-action@v5` and conditional `cargo publish`.
-  - Describe Jujutsu change: `jj describe -m "plan-M6-T1: ci: configure Release Please manifests and release workflow"`
+  - Add `.release-please-manifest.json` initializing workspace crate versions.
+  - Update `.github/workflows/release.yml` with `googleapis/release-please-action@v5` and topological `cargo publish`.
+  - Describe Jujutsu change: `jj describe -m "ci(release): configure Release Please manifests and release workflow"`
 - [ ] **M6-T2: SemVer CI Verification with cargo-semver-checks**
   - Update `.github/workflows/ci.yml` to install `cargo-semver-checks`.
   - Add step verifying PR commits against `origin/main`.

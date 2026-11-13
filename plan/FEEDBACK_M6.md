@@ -11,7 +11,7 @@ This document serves as an asynchronous feedback template for human review. Huma
 ## Completed Tasks
 
 - [x] **M6-T0: Release Pipeline Specification (`docs/release_pipeline.spec.md`, `plan/M6.md`, `plan/FEEDBACK_M6.md`)**
-- [ ] **M6-T1: Release Please Manifests, Crate Packaging & Release Workflow**
+- [x] **M6-T1: Release Please Manifests, Crate Packaging & Release Workflow**
 - [ ] **M6-T2: SemVer CI Verification with `cargo-semver-checks` (`.github/workflows/ci.yml`)**
 
 ---

@@ -37,37 +37,116 @@ jobs:
         if: ${{ steps.release.outputs.pr }}
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Ensure Cargo.lock and workspace dependencies are updated
+      - name: Ensure Cargo.lock, workspace dependencies, and API manifests are updated
         if: ${{ steps.release.outputs.pr }}
         run: |
-          CHECK_VER=$(sed -n 's/^version = "\(.*\)"/\1/p' crates/check/Cargo.toml | head -n 1)
-          if [ -n "$CHECK_VER" ]; then
-            sed -i "s/\(code-review-check = { path = \"crates\/check\", version = \"\)[^\"]*\"/\1$CHECK_VER\"/" Cargo.toml
-          fi
-          cargo check
+          sync_crate() {
+            local crate_dir="$1"
+            local pkg_name="$2"
+            local ver
+            ver=$(sed -n 's/^version = "\(.*\)"/\1/p' "${crate_dir}/Cargo.toml" | head -n 1)
+            if [ -z "$ver" ]; then
+              return
+            fi
+
+            if [ "$pkg_name" = "code-review" ]; then
+              sed -i "/^\[workspace\.package\]/,/^\[/{s/^version = \"[^\"]*\"/version = \"${ver}\"/}" Cargo.toml
+              sed -i "s/version = \"[^\"]*\"; # x-release-please-version/version = \"${ver}\"; # x-release-please-version/" flake.nix
+            else
+              sed -i "s|\(${pkg_name} = { path = \"${crate_dir}\", version = \"\)[^\"]*\"|\1${ver}\"|" Cargo.toml
+            fi
+
+            if [ -f "${crate_dir}/API.md" ]; then
+              sed -i "1s/(v[^)]*)/(v${ver})/" "${crate_dir}/API.md"
+            fi
+          }
+
+          sync_crate "crates/configure-lints" "code-review-configure-lints"
+          sync_crate "crates/coverage" "code-review-coverage"
+          sync_crate "crates/check" "code-review-check"
+          sync_crate "crates/code-review" "code-review"
+
+          cargo check --workspace
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if ! git diff --quiet Cargo.lock Cargo.toml; then
-            git add Cargo.lock Cargo.toml
-            git commit -m "chore: sync Cargo.lock and workspace dependencies"
+          if ! git diff --quiet Cargo.lock Cargo.toml flake.nix crates/*/API.md; then
+            git add Cargo.lock Cargo.toml flake.nix crates/*/API.md
+            git commit -m "chore: sync Cargo.lock, workspace dependencies, and API manifests"
             git push
           fi
 
       - name: Checkout repository
-        if: ${{ steps.release.outputs.releases_created == 'true' || steps.release.outputs['crates/check--release_created'] == 'true' || steps.release.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ steps.release.outputs.releases_created == 'true' || github.event_name == 'workflow_dispatch' }}
         uses: actions/checkout@v7
 
       - name: Install Rust toolchain
-        if: ${{ steps.release.outputs.releases_created == 'true' || steps.release.outputs['crates/check--release_created'] == 'true' || steps.release.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ steps.release.outputs.releases_created == 'true' || github.event_name == 'workflow_dispatch' }}
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Publish code-review-check to crates.io
-        if: ${{ steps.release.outputs['crates/check--release_created'] == 'true' || github.event_name == 'workflow_dispatch' }}
+      - name: Publish workspace crates to crates.io in topological order
+        if: ${{ steps.release.outputs.releases_created == 'true' || github.event_name == 'workflow_dispatch' }}
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN || secrets.CRATES_IO_TOKEN }}
+          IS_DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
+          REL_CONFIGURE_LINTS: ${{ steps.release.outputs['crates/configure-lints--release_created'] }}
+          REL_COVERAGE: ${{ steps.release.outputs['crates/coverage--release_created'] }}
+          REL_CHECK: ${{ steps.release.outputs['crates/check--release_created'] }}
+          REL_CODE_REVIEW: ${{ steps.release.outputs['crates/code-review--release_created'] }}
         run: |
           if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
-            echo "::error::Publishing code-review-check failed: CARGO_REGISTRY_TOKEN (or CRATES_IO_TOKEN) is not configured in repository secrets."
+            echo "::error::Publishing failed: CARGO_REGISTRY_TOKEN (or CRATES_IO_TOKEN) is not configured in repository secrets."
             exit 1
           fi
-          cargo publish -p code-review-check --token "$CARGO_REGISTRY_TOKEN"
+
+          wait_for_sparse_index() {
+            local pkg="$1"
+            local ver="$2"
+            local url="https://index.crates.io/${pkg:0:2}/${pkg:2:2}/${pkg}"
+            for attempt in $(seq 1 20); do
+              if curl -fsSL -H 'Cache-Control: no-cache' "$url" 2>/dev/null | jq -e --arg v "$ver" 'select(.vers == $v)' >/dev/null; then
+                return 0
+              fi
+              sleep 3
+            done
+            echo "::warning::Timed out waiting for ${pkg}@${ver} to appear in crates.io sparse index; continuing."
+          }
+
+          publish_if_needed() {
+            local crate_dir="$1"
+            local pkg="$2"
+            local release_created="$3"
+            local is_leaf="$4"
+            local ver
+            ver=$(sed -n 's/^version = "\(.*\)"/\1/p' "${crate_dir}/Cargo.toml" | head -n 1)
+            local url="https://index.crates.io/${pkg:0:2}/${pkg:2:2}/${pkg}"
+            local index_body=""
+            local on_crates_io="false"
+            local ver_published="false"
+
+            if index_body=$(curl -fsSL -H 'Cache-Control: no-cache' "$url" 2>/dev/null); then
+              on_crates_io="true"
+              if printf '%s\n' "$index_body" | jq -e --arg v "$ver" 'select(.vers == $v)' >/dev/null; then
+                ver_published="true"
+              fi
+            fi
+
+            if [ "$ver_published" = "true" ]; then
+              echo "Skipping ${pkg}@${ver}: already published on crates.io."
+              return 0
+            fi
+
+            if [ "$release_created" = "true" ] || [ "$IS_DISPATCH" = "true" ] || [ "$on_crates_io" = "false" ]; then
+              echo "Publishing ${pkg}@${ver} to crates.io..."
+              cargo publish -p "$pkg" --token "$CARGO_REGISTRY_TOKEN"
+              if [ "$is_leaf" = "true" ]; then
+                wait_for_sparse_index "$pkg" "$ver"
+              fi
+            else
+              echo "No new release created for ${pkg}@${ver}; skipping."
+            fi
+          }
+
+          publish_if_needed "crates/configure-lints" "code-review-configure-lints" "$REL_CONFIGURE_LINTS" "true"
+          publish_if_needed "crates/coverage" "code-review-coverage" "$REL_COVERAGE" "true"
+          publish_if_needed "crates/check" "code-review-check" "$REL_CHECK" "true"
+          publish_if_needed "crates/code-review" "code-review" "$REL_CODE_REVIEW" "false"

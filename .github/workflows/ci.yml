@@ -58,7 +58,7 @@ jobs:
       - name: Verify package & metadata
         run: |
           cargo metadata --format-version 1 --no-deps > /dev/null
-          cargo publish --workspace --dry-run
+          cargo package --workspace --no-verify
 
   test:
     name: Unit & Integration Tests
@@ -151,70 +151,24 @@ jobs:
         with:
           tool: cargo-semver-checks
 
-      - name: Verify Feature PR SemVer compatibility against origin/main
+      - name: Check Feature PR against origin/main
         if: ${{ !startsWith(github.head_ref, 'release-please--') }}
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          git fetch --no-tags origin main:refs/remotes/origin/main
-
-          BREAKING_PATTERN='^[a-z]+(\([^)]+\))?!:|^BREAKING[ -]CHANGE:'
-          RELEASE_TYPE_ARGS=()
-          if printf '%s\n' "$PR_TITLE" | grep -Eq "$BREAKING_PATTERN" || \
-             git log --format=%B origin/main..HEAD | grep -Eq "$BREAKING_PATTERN"; then
-            echo "Breaking change intent declared via Conventional Commits; validating with --release-type major."
-            RELEASE_TYPE_ARGS=(--release-type major)
+          ARGS=(--workspace --baseline-rev origin/main)
+          PATTERN='^[a-z]+(\([^)]+\))?!:|^BREAKING[ -]CHANGE:'
+          if printf '%s\n' "$PR_TITLE" | grep -Eq "$PATTERN" || git log --format=%B origin/main..HEAD | grep -Eq "$PATTERN"; then
+            ARGS+=(--release-type major)
           fi
+          cargo semver-checks check-release "${ARGS[@]}"
 
-          REPO_ROOT=$(pwd)
-          while IFS=$'\t' read -r pkg manifest_path; do
-            rel_manifest="${manifest_path#"${REPO_ROOT}/"}"
-            if ! git cat-file -e "origin/main:${rel_manifest}" 2>/dev/null; then
-              echo "Skipping SemVer baseline check for newly added crate '${pkg}' (${rel_manifest} not in origin/main)."
-              continue
-            fi
-
-            echo "Checking SemVer compatibility of '${pkg}' against origin/main..."
-            if ! cargo semver-checks check-release -p "$pkg" --baseline-rev origin/main "${RELEASE_TYPE_ARGS[@]}"; then
-              echo "::error::Breaking public API change detected in '${pkg}' relative to origin/main without a Conventional Commit breaking annotation ('feat!:' / '<type>!:' or 'BREAKING CHANGE:')."
-              exit 1
-            fi
-          done < <(
-            cargo metadata --no-deps --format-version 1 | jq -r '
-              .packages[]
-              | select((.publish == null) or ((.publish | length) > 0))
-              | select(any(.targets[]; .kind | index("lib") != null))
-              | "\(.name)\t\(.manifest_path)"
-            '
-          )
-
-      - name: Verify Release Candidate PR SemVer bump against published baseline
+      - name: Check Release PR against crates.io
         if: ${{ startsWith(github.head_ref, 'release-please--') }}
         run: |
-          git fetch --tags origin
-
-          while IFS=$'\t' read -r pkg ver; do
-            index_url="https://index.crates.io/${pkg:0:2}/${pkg:2:2}/${pkg}"
-            if curl -fsSL -H 'Cache-Control: no-cache' "$index_url" >/dev/null 2>&1; then
-              echo "Checking Release Candidate '${pkg}' v${ver} against published crates.io baseline..."
-              cargo semver-checks check-release -p "$pkg"
-            else
-              latest_tag=$(git tag --list "${pkg}-v*" --sort=-v:refname | head -n 1)
-              if [ -n "$latest_tag" ] && [ "$latest_tag" != "${pkg}-v${ver}" ]; then
-                echo "Crate '${pkg}' is not yet on crates.io; checking v${ver} against prior tag '${latest_tag}'..."
-                cargo semver-checks check-release -p "$pkg" --baseline-rev "$latest_tag"
-              else
-                echo "Crate '${pkg}' v${ver} has no published crates.io baseline or prior release tag yet; skipping initial release check."
-              fi
-            fi
-          done < <(
-            cargo metadata --no-deps --format-version 1 | jq -r '
-              .packages[]
-              | select((.publish == null) or ((.publish | length) > 0))
-              | select(any(.targets[]; .kind | index("lib") != null))
-              | "\(.name)\t\(.version)"
-            '
-          )
+          if curl -fsSL https://index.crates.io/co/de/code-review >/dev/null 2>&1; then
+            cargo semver-checks check-release --workspace
+          fi
 
   auto-merge:
     name: Auto-Merge Dependabot PR

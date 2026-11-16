@@ -21,8 +21,8 @@ This document serves as an asynchronous feedback template for human review. Huma
 ### 1. Strengths & Positives
 
 - Closed Intent-vs.-Reality SemVer verification loop pairing Release Please (`bump-minor-pre-major` + `bump-patch-for-minor-pre-major`) with `cargo-semver-checks` across both Feature PRs and Release Candidate PRs.
-- Topological `crates.io` publication across all four workspace crates (`code-review-configure-lints`, `code-review-coverage`, `code-review-check`, `code-review`) with sparse-index idempotency and propagation polling.
-- Automatic version synchronization across `Cargo.toml`, `Cargo.lock`, `flake.nix`, and `crates/*/API.md`.
+- Concise multi-package `cargo publish` across all four workspace crates (`code-review-configure-lints`, `code-review-coverage`, `code-review-check`, `code-review`), relying on Cargo's native topological ordering and sparse-index waiting.
+- Automatic version synchronization across `Cargo.toml`, `Cargo.lock`, and `flake.nix`.
 
 ### 2. Issues & Concerns
 

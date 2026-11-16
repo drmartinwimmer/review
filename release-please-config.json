@@ -3,10 +3,23 @@
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": true,
   "separate-pull-requests": false,
+  "plugins": [
+    {
+      "type": "linked-versions",
+      "groupName": "code-review-workspace",
+      "components": [
+        "code-review-configure-lints",
+        "code-review-coverage",
+        "code-review-check",
+        "code-review"
+      ]
+    }
+  ],
   "packages": {
     "crates/configure-lints": {
       "release-type": "rust",
       "package-name": "code-review-configure-lints",
+      "component": "code-review-configure-lints",
       "extra-files": [
         {
           "type": "toml",
@@ -18,6 +31,7 @@
     "crates/coverage": {
       "release-type": "rust",
       "package-name": "code-review-coverage",
+      "component": "code-review-coverage",
       "extra-files": [
         {
           "type": "toml",
@@ -29,6 +43,7 @@
     "crates/check": {
       "release-type": "rust",
       "package-name": "code-review-check",
+      "component": "code-review-check",
       "extra-files": [
         {
           "type": "toml",
@@ -40,6 +55,7 @@
     "crates/code-review": {
       "release-type": "rust",
       "package-name": "code-review",
+      "component": "code-review",
       "extra-files": [
         {
           "type": "toml",

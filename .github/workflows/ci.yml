@@ -58,7 +58,7 @@ jobs:
       - name: Verify package & metadata
         run: |
           cargo metadata --format-version 1 --no-deps > /dev/null
-          cargo publish --dry-run -p code-review-check
+          cargo package --workspace --no-verify
 
   test:
     name: Unit & Integration Tests
@@ -130,9 +130,49 @@ jobs:
           verify_direnv .workspaces/ci-test
           EOF
 
+  semver:
+    name: SemVer API Compatibility
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-semver-checks
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-semver-checks
+
+      - name: Check Feature PR against origin/main
+        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          ARGS=(--workspace --baseline-rev origin/main)
+          PATTERN='^[a-z]+(\([^)]+\))?!:|^BREAKING[ -]CHANGE:'
+          if printf '%s\n' "$PR_TITLE" | grep -Eq "$PATTERN" || git log --format=%B origin/main..HEAD | grep -Eq "$PATTERN"; then
+            ARGS+=(--release-type major)
+          fi
+          cargo semver-checks check-release "${ARGS[@]}"
+
+      - name: Check Release PR against crates.io
+        if: ${{ startsWith(github.head_ref, 'release-please--') }}
+        run: |
+          if curl -fsSL https://index.crates.io/co/de/code-review >/dev/null 2>&1; then
+            cargo semver-checks check-release --workspace
+          fi
+
   auto-merge:
     name: Auto-Merge Dependabot PR
-    needs: [lint, test, nix]
+    needs: [lint, test, nix, semver]
     if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:

@@ -9,7 +9,7 @@
 [![Docs.rs](https://docs.rs/api-manifest/badge.svg?label=api-manifest%20docs)](https://docs.rs/api-manifest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Built with Rust](https://img.shields.io/badge/rust-2024%20edition-orange.svg)](https://www.rust-lang.org/)
-[![MSRV: 1.85+](https://img.shields.io/badge/MSRV-1.85%2B-blue.svg?logo=rust)](https://www.rust-lang.org/)
+[![MSRV: 1.100+](https://img.shields.io/badge/MSRV-1.100%2B-blue.svg?logo=rust)](https://www.rust-lang.org/)
 
 **`code-review`** provides an end-to-end ecosystem to evaluate, inspect, and enforce code quality standards on agent-generated code. It pairs modular developer skills with high-performance Rust CLI tools and an automated evaluation suite powered by [Inspect AI](https://inspect.ai-safety-institute.org.uk/) and the [Fence](https://github.com/fencesandbox/fence) sandbox.
 
@@ -25,7 +25,7 @@
 ### 1. Rust CLI Toolkit (`code-review`)
 
 - **`code-review check`**: Runs all relevant linters and formatters (`cargo fmt`, `cargo clippy`, `purist`, `api-manifest`, and format/security checks), aggregating findings into a normalized diagnostic report (terminal, JSON, or Markdown) with Jujutsu changed-file filtering (`--changed-only`).
-- **`code-review configure-lints`**: Programmatically updates `Cargo.toml` using `toml_edit` to inject strict Clippy rules (Don't Panic, Don't Fail Silently, Memory Safety, Numerics, Suppression Bans) while preserving formatting and comments.
+- **`code-review configure-lints`**: Programmatically updates `Cargo.toml` using `toml_edit` to inject strict Rust, Cargo, and Clippy rules (Cargo manifest & unused-dependency lints, Don't Panic, Don't Fail Silently, Memory Safety, Numerics, Suppression Bans) while preserving formatting and comments.
 - **`code-review purist`**: AST static analysis engine (powered by `purist` and `syn`) enforcing patterns beyond Clippy's scope (e.g. forbidding inline `mod` declarations in `main.rs`/`lib.rs`, enforcing free functions over dummy structs, requiring VCS/manifest-relative paths, forbidding raw `Result<T, String>`, and validating `#[expect]`/`#[allow]` comments).
 - **`code-review api`**: Public API surface manifest generator and drift auditor (powered by `api-manifest`), inspecting library exports, Clap CLI hierarchies, HTTP endpoints, and `ConfigFile` schemas to maintain checked-in `API.md` manifests.
 - **`code-review coverage`**: Source-based code coverage engine driving `cargo-llvm-cov` to report line, function, branch, and region coverage metrics and enforce `--fail-under` coverage gates.

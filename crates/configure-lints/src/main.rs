@@ -5,7 +5,7 @@ use std::process::ExitCode;
 #[derive(Parser, Debug)]
 #[command(
     name = "configure-lints",
-    about = "Configure or remove strict Clippy lints in Cargo.toml",
+    about = "Configure or remove strict Rust, Cargo, and Clippy lints in Cargo.toml",
     version
 )]
 struct Cli {

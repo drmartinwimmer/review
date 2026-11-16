@@ -1,4 +1,4 @@
-use super::file_utils::{find_files_with_extensions, is_tool_available};
+use super::file_utils::{find_files_with_extensions, is_tool_available, normalize_path};
 use purist::{Diagnostic, Severity, Span};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -60,19 +60,6 @@ impl MarkdownRunner {
         let combined = format!("{stdout}\n{stderr}");
 
         Ok(parse_mdformat_output(&combined, &self.target_path))
-    }
-}
-
-/// Normalizes a file path relative to the base target directory.
-fn normalize_path(path: &Path, base_dir: &Path) -> PathBuf {
-    if path.is_absolute() {
-        if let Ok(rel) = path.strip_prefix(base_dir) {
-            rel.to_path_buf()
-        } else {
-            path.to_path_buf()
-        }
-    } else {
-        path.to_path_buf()
     }
 }
 

@@ -7,7 +7,7 @@
 ## Included Checks
 
 1. **Rust formatting**: `cargo fmt --check`
-2. **Rust compiler & Clippy lints**: `cargo clippy --message-format=json`
+2. **Rust compiler, Cargo, & Clippy lints**: `cargo clippy --message-format=json` (including Cargo 1.100 `[lints.cargo]` manifest & unused-dependency checks)
 3. **Purist AST linter**: `purist` static analysis rules
 4. **Dependency security audit**: `cargo audit --json`
 5. **Markdown formatting & linting**: `prettier` / `mdformat` (if available)

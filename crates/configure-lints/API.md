@@ -6,18 +6,18 @@
 
 ### Structs
 
-- `pub struct ConfigureLintsCommand { /* no public fields */ }` — _Command-line arguments for configuring or removing Clippy lints in Cargo.toml._
+- `pub struct ConfigureLintsCommand { /* no public fields */ }` — _Command-line arguments for configuring or removing Rust, Cargo, and Clippy lints in Cargo.toml._
 - `pub struct ConfigureResult { pub modified: bool, pub lints_configured: usize }` — _Result metadata returned after modifying or inspecting a Cargo.toml file._
 
 ### Enums
 
 - `pub enum CargoTomlError { ManifestNotFound { path: PathBuf }, Io { source: std :: io :: Error }, Parse { source: TomlError }, NotATable { table: & 'static str }, LintsUnderPackage, MissingWorkspaceAndPackage }` — _Errors that can occur during Cargo.toml inspection or modification._
-- `pub enum LintProfile { Strict, Standard }` — _Profile defining which preset of Clippy lints to inject._
+- `pub enum LintProfile { Strict, Standard }` — _Profile defining which preset of Rust, Cargo, and Clippy lints to inject._
 
 ### Functions
 
-- `pub fn configure_lints(manifest_path: & Path, profile: LintProfile) -> Result < ConfigureResult , CargoTomlError >` — _Configures strict Clippy lints in the specified Cargo.toml manifest._
-- `pub fn remove_lints(manifest_path: & Path) -> Result < ConfigureResult , CargoTomlError >` — _Removes configured Clippy lints and associated tables from the specified Cargo.toml manifest._
+- `pub fn configure_lints(manifest_path: & Path, profile: LintProfile) -> Result < ConfigureResult , CargoTomlError >` — _Configures strict Rust, Cargo, and Clippy lints in the specified Cargo.toml manifest._
+- `pub fn remove_lints(manifest_path: & Path) -> Result < ConfigureResult , CargoTomlError >` — _Removes configured Rust, Cargo, and Clippy lints and associated tables from the specified Cargo.toml manifest._
 
 ### Methods
 
@@ -26,13 +26,13 @@
 - `pub fn ConfigureLintsCommand::manifest_path(& self) -> & Path` — _Returns the manifest path targeted by this command._
 - `pub fn ConfigureLintsCommand::new(manifest_path: impl Into < PathBuf >, profile: LintProfile, remove: bool, quiet: bool) -> Self` — _Creates a new `ConfigureLintsCommand` instance._
 - `pub fn ConfigureLintsCommand::profile(& self) -> LintProfile` — _Returns the lint profile preset._
-- `pub fn ConfigureLintsCommand::run(self) -> Result < () , CargoTomlError >` — _Executes the configuration or removal of Clippy lints in the target manifest._
+- `pub fn ConfigureLintsCommand::run(self) -> Result < () , CargoTomlError >` — _Executes the configuration or removal of Rust, Cargo, and Clippy lints in the target manifest._
 
 ## 2. CLI API
 
 ### `configure-lints`
 
-Configure or remove strict Clippy lints in Cargo.toml
+Configure or remove strict Rust, Cargo, and Clippy lints in Cargo.toml
 
 | Flag / Argument   | Type      | Required | Default      | Description                                        |
 | ----------------- | --------- | -------- | ------------ | -------------------------------------------------- |

@@ -10,6 +10,15 @@ pub fn is_tool_available(cmd: &str) -> bool {
         .is_ok_and(|out| out.status.success())
 }
 
+/// Normalizes a file path relative to the base target directory.
+pub(crate) fn normalize_path(path: &Path, base_dir: &Path) -> PathBuf {
+    if path.is_absolute() {
+        path.trim_prefix(base_dir).to_path_buf()
+    } else {
+        path.to_path_buf()
+    }
+}
+
 /// Recursively discovers files with matching extensions, ignoring hidden directories and build artifacts.
 pub fn find_files_with_extensions(root: &Path, extensions: &[&str]) -> Vec<PathBuf> {
     if root.is_file() {
@@ -93,6 +102,23 @@ mod tests {
         assert_that!(
             is_tool_available("definitely_nonexistent_binary_xyz123"),
             is_false()
+        );
+    }
+
+    #[googletest::test]
+    fn normalize_path_trims_matching_base_dir_on_absolute_paths() {
+        let base = Path::new("/workspace");
+        expect_that!(
+            normalize_path(Path::new("/workspace/src/lib.rs"), base),
+            eq(Path::new("src/lib.rs"))
+        );
+        expect_that!(
+            normalize_path(Path::new("/other/src/lib.rs"), base),
+            eq(Path::new("/other/src/lib.rs"))
+        );
+        expect_that!(
+            normalize_path(Path::new("src/lib.rs"), base),
+            eq(Path::new("src/lib.rs"))
         );
     }
 }

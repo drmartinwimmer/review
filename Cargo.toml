@@ -3,7 +3,6 @@ members = ["crates/*"]
 resolver = "2"
 
 [workspace.package]
-version = "0.2.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/drmartinwimmer/review"
@@ -90,4 +89,22 @@ cognitive_complexity = "warn"
 too_many_lines = "warn"
 
 [workspace.lints.rust]
+ambiguous_negative_literals = "warn"
+deref_into_dyn_supertrait = "warn"
+impl_trait_redundant_captures = "warn"
+macro_use_extern_crate = "warn"
 missing_copy_implementations = "warn"
+non_ascii_idents = "warn"
+redundant_lifetimes = "warn"
+unit_bindings = "warn"
+unsafe_op_in_unsafe_fn = "warn"
+unused_lifetimes = "warn"
+unused_macro_rules = "warn"
+
+[workspace.lints.cargo]
+non_kebab_case_bins = "warn"
+non_kebab_case_packages = "warn"
+redundant_homepage = "warn"
+unused_dependencies = "warn"
+unused_workspace_dependencies = "warn"
+unused_workspace_package_fields = "warn"

@@ -1,14 +1,14 @@
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
-/// Profile defining which preset of Clippy lints to inject.
+/// Profile defining which preset of Rust, Cargo, and Clippy lints to inject.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LintProfile {
-    /// Comprehensive safety, robustness, memory safety, numerics, suppression hygiene, and complexity rules (51 lints).
+    /// Comprehensive safety, robustness, memory safety, numerics, suppression hygiene, Cargo manifest, and complexity rules (67 lints).
     #[default]
     Strict,
-    /// Standard baseline safety and robustness rules (48 lints), omitting the strictest slicing
+    /// Standard baseline safety, robustness, and Cargo manifest rules (64 lints), omitting the strictest slicing
     /// and suppression bans (`string_slice`, `indexing_slicing`, and `allow_attributes`).
     Standard,
 }
@@ -25,14 +25,45 @@ impl LintProfile {
     }
 
     pub(crate) fn expected_count(&self) -> usize {
-        match self {
-            Self::Strict => 51,
-            Self::Standard => 48,
-        }
+        let cargo_count = CARGO_LINTS
+            .iter()
+            .filter(|lint| self.includes_lint(lint))
+            .count();
+        let rust_count = RUST_LINTS
+            .iter()
+            .filter(|lint| self.includes_lint(lint))
+            .count();
+        let clippy_count = LINT_CATEGORIES
+            .iter()
+            .flat_map(|category| category.lints.iter())
+            .filter(|lint| self.includes_lint(lint))
+            .count();
+        cargo_count + rust_count + clippy_count
     }
 }
 
-pub(crate) const RUST_LINTS: &[&str] = &["missing_copy_implementations"];
+pub(crate) const CARGO_LINTS: &[&str] = &[
+    "non_kebab_case_bins",
+    "non_kebab_case_packages",
+    "redundant_homepage",
+    "unused_dependencies",
+    "unused_workspace_dependencies",
+    "unused_workspace_package_fields",
+];
+
+pub(crate) const RUST_LINTS: &[&str] = &[
+    "ambiguous_negative_literals",
+    "deref_into_dyn_supertrait",
+    "impl_trait_redundant_captures",
+    "macro_use_extern_crate",
+    "missing_copy_implementations",
+    "non_ascii_idents",
+    "redundant_lifetimes",
+    "unit_bindings",
+    "unsafe_op_in_unsafe_fn",
+    "unused_lifetimes",
+    "unused_macro_rules",
+];
 
 pub(crate) struct LintCategory {
     pub(crate) title: &'static str,

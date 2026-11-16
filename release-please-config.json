@@ -58,11 +58,6 @@
       "component": "code-review",
       "extra-files": [
         {
-          "type": "toml",
-          "path": "/Cargo.toml",
-          "jsonpath": "$.workspace.package.version"
-        },
-        {
           "type": "generic",
           "path": "/flake.nix"
         }

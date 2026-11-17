@@ -37,7 +37,9 @@ jobs:
       - name: Check code formatting (Rust)
         run: cargo fmt --check
 
-      - name: Check Clippy lints
+      - name: Check Clippy and Cargo lints
+        env:
+          CARGO_BUILD_WARNINGS: deny
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Run purist AST linter

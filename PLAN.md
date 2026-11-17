@@ -477,9 +477,9 @@ When an agent reviews code, it dispatches specialized review subagents in parall
 ### Milestone 8: Thematic Subagent Review Skills Suite (including API & Dependencies)
 
 - **Description:** Create thematic review skills under `skills/` (`reviewing-spec-compliance`, `reviewing-rust-modularity`, `reviewing-rust-robustness`, `reviewing-rust-testing`, `reviewing-rust-lint-hygiene`, `reviewing-containment-safety`, `reviewing-api-surface`, and `reviewing-dependencies`) with frontmatter, checklists, rationalization tables, and subagent prompts.
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Target Completion Date:** 2026-10-27
-- **Actual Completion Date:** -
+- **Actual Completion Date:** 2026-11-17
 - **Dependencies:** Milestone 7
 - **Tasks File:** `plan/M8.md`
 - **Feedback File:** `plan/FEEDBACK_M8.md`
@@ -647,18 +647,18 @@ When an agent reviews code, it dispatches specialized review subagents in parall
 
 ### Milestone 8: Thematic Subagent Review Skills Suite
 
-- [ ] **M8-T0: Skills Specifications (`skills/reviewing-*/SPEC.md`)**
+- [x] **M8-T0: Skills Specifications (`skills/reviewing-*/SPEC.md`, `plan/M8.md`, `plan/FEEDBACK_M8.md`)**
   - Write module specs for each of the 8 thematic review skills (including `reviewing-api-surface`, `reviewing-dependencies`, and `reviewing-rust-testing`).
-  - Describe Jujutsu change: `jj describe -m "plan-M8-T0: docs: add specs for thematic review skills"`
-- [ ] **M8-T1: API Surface Review Skill (`skills/reviewing-api-surface/SKILL.md`)**
+  - Describe Jujutsu change: `jj --no-pager describe -m "docs(skills): add specifications for thematic review skills"`
+- [x] **M8-T1: API Surface Review Skill (`skills/reviewing-api-surface/SKILL.md`)**
   - Author `skills/reviewing-api-surface/SKILL.md`.
   - Focus on API minimalism (`pub(crate)` vs `pub`), reviewing `API.md` diffs, deprecating superseded APIs (`#[deprecated]`), and migration path clarity.
-  - Describe Jujutsu change: `jj describe -m "plan-M8-T1: feat: author reviewing-api-surface skill playbook"`
-- [ ] **M8-T2: Dependency Hygiene & Security Review Skill (`skills/reviewing-dependencies/SKILL.md`)**
+  - Describe Jujutsu change: `jj --no-pager describe -m "feat(skills): author reviewing-api-surface skill playbook"`
+- [x] **M8-T2: Dependency Hygiene & Security Review Skill (`skills/reviewing-dependencies/SKILL.md`)**
   - Author `skills/reviewing-dependencies/SKILL.md`.
   - Focus on YAGNI/minimalism (stdlib vs crate), popularity & established ecosystem alternatives (`cargo info`, download counts, de facto standards), maintenance health, vulnerability checking (`cargo audit`), transitive dependency weight (`cargo tree`), build script risks (`build.rs`), and license compliance.
-  - Describe Jujutsu change: `jj describe -m "plan-M8-T2: feat: author reviewing-dependencies skill playbook"`
-- [ ] **M8-T3: Remaining Review Skills Playbooks (`skills/reviewing-*/SKILL.md`)**
+  - Describe Jujutsu change: `jj --no-pager describe -m "feat(skills): author reviewing-dependencies skill playbook"`
+- [x] **M8-T3: Remaining Review Skills Playbooks (`skills/reviewing-*/SKILL.md`)**
   - Implement `reviewing-spec-compliance/SKILL.md`.
   - Implement `reviewing-rust-modularity/SKILL.md`.
   - Implement `reviewing-rust-robustness/SKILL.md`.
@@ -666,7 +666,7 @@ When an agent reviews code, it dispatches specialized review subagents in parall
   - Implement `reviewing-rust-lint-hygiene/SKILL.md`.
   - Implement `reviewing-containment-safety/SKILL.md`.
   - Ensure all skills adhere to `dev:writing-skills` (<500 words, rationalization tables, red flags).
-  - Describe Jujutsu change: `jj describe -m "plan-M8-T3: feat: author remaining thematic review skill playbooks"`
+  - Describe Jujutsu change: `jj --no-pager describe -m "feat(skills): author remaining thematic review skill playbooks and complete Milestone 8"`
 
 ### Milestone 9: Inspect AI Eval Harness with Fence Sandbox
 

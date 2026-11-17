@@ -37,9 +37,11 @@
   - `reviewing-spec-compliance`: Verifies code meets specifications and milestone scope.
   - `reviewing-rust-modularity`: Ensures single responsibility and separate submodule files.
   - `reviewing-rust-robustness`: Checks error handling, error enums, and absence of unwraps/panics.
-  - `reviewing-rust-testing`: Enforces `#[gtest]`, `expect_that!`, `.or_fail()?`, and clean teardown.
+  - `reviewing-rust-testing`: Enforces `#[googletest::test]`, `expect_that!`, `.or_fail()?`, RAII teardown, and error-path coverage.
   - `reviewing-rust-lint-hygiene`: Enforces zero warnings and strict clippy compliance.
   - `reviewing-containment-safety`: Validates sandbox boundaries and VCS root-relative path resolution.
+  - `reviewing-api-surface`: Audits `API.md` drift, least-privilege `pub(crate)` visibility, SemVer compatibility, and `#[deprecated]` lifecycles.
+  - `reviewing-dependencies`: Enforces YAGNI minimalism, established ecosystem crates, `cargo audit` advisories, and MIT/Apache-2.0 license compliance.
 
 ### 3. Inspect AI & Fence Evaluation Suite (`evals/`)
 

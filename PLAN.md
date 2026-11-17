@@ -650,7 +650,7 @@ When an agent reviews code, it dispatches specialized review subagents in parall
 - [x] **M8-T0: Skills Specifications (`skills/reviewing-*/SPEC.md`, `plan/M8.md`, `plan/FEEDBACK_M8.md`)**
   - Write module specs for each of the 8 thematic review skills (including `reviewing-api-surface`, `reviewing-dependencies`, and `reviewing-rust-testing`).
   - Describe Jujutsu change: `jj --no-pager describe -m "docs(skills): add specifications for thematic review skills"`
-- [ ] **M8-T1: API Surface Review Skill (`skills/reviewing-api-surface/SKILL.md`)**
+- [x] **M8-T1: API Surface Review Skill (`skills/reviewing-api-surface/SKILL.md`)**
   - Author `skills/reviewing-api-surface/SKILL.md`.
   - Focus on API minimalism (`pub(crate)` vs `pub`), reviewing `API.md` diffs, deprecating superseded APIs (`#[deprecated]`), and migration path clarity.
   - Describe Jujutsu change: `jj --no-pager describe -m "feat(skills): author reviewing-api-surface skill playbook"`

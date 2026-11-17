@@ -637,13 +637,13 @@ When an agent reviews code, it dispatches specialized review subagents in parall
 
 ### Milestone 7: Feedback Distillation & Reflection Skill
 
-- [ ] **M7-T0: Skill Specification (`skills/distilling-feedback/SPEC.md`)**
+- [x] **M7-T0: Skill Specification (`skills/distilling-feedback/SPEC.md`, `plan/M7.md`, `plan/FEEDBACK_M7.md`)**
   - Specify the distillation process contracts, transcript parsing schemas, and output artifact requirements.
-  - Describe Jujutsu change: `jj describe -m "plan-M7-T0: docs: add spec for distilling-feedback skill"`
+  - Describe Jujutsu change: `jj --no-pager describe -m "docs(skills): add spec for distilling-feedback skill"`
 - [ ] **M7-T1: Skill Playbook (`skills/distilling-feedback/SKILL.md`)**
   - Write concise, token-efficient playbook following `dev:writing-skills`.
   - Include triggers (`Use when analyzing past agent session logs...`), transcript parsing steps, failure categorization patterns, and guideline synthesis templates.
-  - Describe Jujutsu change: `jj describe -m "plan-M7-T1: feat: create distilling-feedback skill playbook"`
+  - Describe Jujutsu change: `jj --no-pager describe -m "feat(skills): create distilling-feedback skill playbook"`
 
 ### Milestone 8: Thematic Subagent Review Skills Suite
 

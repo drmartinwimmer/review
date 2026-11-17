@@ -1,6 +1,6 @@
 {
-  "crates/configure-lints": "0.2.0",
-  "crates/coverage": "0.2.0",
-  "crates/check": "0.2.0",
-  "crates/code-review": "0.2.0"
+  "crates/configure-lints": "0.2.1",
+  "crates/coverage": "0.2.1",
+  "crates/check": "0.2.1",
+  "crates/code-review": "0.2.1"
 }

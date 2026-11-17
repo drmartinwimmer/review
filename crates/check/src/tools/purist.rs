@@ -1,13 +1,11 @@
-use purist::{DiagnosticReport, PuristEngine};
+use purist::{PuristDiagnostic, PuristEngine};
+use std::io;
 use std::path::{Path, PathBuf};
 
 /// Runner for purist AST static analysis rules.
 pub struct PuristRunner {
     target_path: PathBuf,
 }
-
-/// Backwards compatibility alias for `PuristRunner`.
-pub type OpinionatedRunner = PuristRunner;
 
 impl PuristRunner {
     /// Creates a new `PuristRunner` targeting the specified directory or file.
@@ -17,8 +15,8 @@ impl PuristRunner {
         }
     }
 
-    /// Executes purist rules against the target path and returns the report.
-    pub fn run(&self) -> Result<DiagnosticReport, std::io::Error> {
+    /// Executes purist rules against the target path and returns all emitted diagnostics.
+    pub fn run(&self) -> Result<Vec<PuristDiagnostic>, io::Error> {
         let path = if self.target_path.as_os_str().is_empty() {
             Path::new(".")
         } else {
@@ -26,13 +24,14 @@ impl PuristRunner {
         };
 
         let engine = PuristEngine::new();
-        engine.check_path(path)
+        Ok(engine.check_path(path)?.diagnostics)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::diagnostics::Diagnostic;
     use googletest::prelude::*;
     use std::fs;
     use tempfile::tempdir;
@@ -49,8 +48,8 @@ mod tests {
         fs::write(&file_path, "pub fn calculate(a: i32) -> i32 { a * 2 }\n")?;
 
         let runner = PuristRunner::new(file_path);
-        let report = runner.run()?;
-        assert_that!(report.is_empty(), is_true());
+        let diags = runner.run()?;
+        assert_that!(diags.is_empty(), is_true());
         Ok(())
     }
 
@@ -69,11 +68,13 @@ mod tests {
         )?;
 
         let runner = PuristRunner::new(file_path);
-        let report = runner.run()?;
-        assert_that!(report.is_empty(), is_false());
-        assert_that!(report.diagnostics.len(), eq(1));
-        let diag = report.diagnostics.first().ok_or("expected diagnostic")?;
-        assert_that!(&diag.rule, eq("purist::error_types"));
+        let diags = runner.run()?;
+        assert_that!(diags.len(), eq(1));
+        let diag = diags.first().ok_or("expected diagnostic")?;
+        assert_that!(
+            diag.code().map(|c| c.to_string()),
+            some(eq("purist::error_types"))
+        );
         Ok(())
     }
 }

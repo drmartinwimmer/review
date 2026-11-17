@@ -8,7 +8,11 @@ license = "MIT"
 repository = "https://github.com/drmartinwimmer/review"
 
 [workspace.dependencies]
+annotate-snippets = "0.12"
+anstyle = "1.0"
+anstyle-query = "1.1"
 clap = { version = "4.5", features = ["derive"] }
+miette = { version = "7.6", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 toml_edit = "0.25"
@@ -17,7 +21,7 @@ googletest = "0.14"
 tempfile = "3"
 code-review-configure-lints = { path = "crates/configure-lints", version = "0.2.0" }
 code-review-check = { path = "crates/check", version = "0.2.0" }
-purist = "0.11.0"
+purist = { version = "0.12.0", default-features = false }
 api-manifest = "0.4.0"
 clapback = "0.2.0"
 code-review-coverage = { path = "crates/coverage", version = "0.2.0" }

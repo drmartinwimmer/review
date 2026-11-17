@@ -1,19 +1,17 @@
-use purist::{Diagnostic, DiagnosticReport};
+use crate::diagnostics::{CheckDiagnostic, DiagnosticReport};
 use std::collections::HashSet;
+use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, ExitStatus};
 
 /// Error type for Jujutsu VCS operations.
 #[derive(Debug, thiserror::Error)]
 pub enum JjError {
     #[error("Failed to execute 'jj --no-pager diff --summary': {0}")]
-    Execution(#[source] std::io::Error),
+    Execution(#[source] io::Error),
 
     #[error("Jujutsu command exited with status {status}: {message}")]
-    CommandFailed {
-        status: std::process::ExitStatus,
-        message: String,
-    },
+    CommandFailed { status: ExitStatus, message: String },
 }
 
 /// VCS interface for querying modified files in a Jujutsu repository.
@@ -62,12 +60,6 @@ pub fn parse_jj_diff_summary(output: &str, base_dir: &Path) -> HashSet<PathBuf> 
             continue;
         }
 
-        // Summary format:
-        // M path/to/file
-        // A path/to/file
-        // D path/to/file (deleted - ignored for linting)
-        // R old/path -> new/path
-        // C old/path -> new/path
         let mut parts = trimmed.split_whitespace();
         let Some(status) = parts.next() else {
             continue;
@@ -80,7 +72,6 @@ pub fn parse_jj_diff_summary(output: &str, base_dir: &Path) -> HashSet<PathBuf> 
                 }
             }
             "R" | "C" => {
-                // Find target path after "->"
                 let rest: Vec<&str> = parts.collect();
                 if let Some(pos) = rest.iter().position(|&s| s == "->")
                     && let Some(target_path) = rest.get(pos + 1)
@@ -88,7 +79,6 @@ pub fn parse_jj_diff_summary(output: &str, base_dir: &Path) -> HashSet<PathBuf> 
                     insert_normalized_path(&mut files, target_path, base_dir);
                 }
             }
-            // Deletions and other statuses do not produce modified files for linting
             _ => {}
         }
     }
@@ -100,7 +90,6 @@ fn insert_normalized_path(set: &mut HashSet<PathBuf>, path_str: &str, base_dir: 
     let raw = PathBuf::from(path_str);
     set.insert(raw.clone());
 
-    // Also insert relative to base_dir if base_dir is non-empty
     if base_dir != Path::new(".") && !base_dir.as_os_str().is_empty() {
         set.insert(base_dir.join(&raw));
     }
@@ -114,56 +103,54 @@ pub fn filter_diagnostics_by_changed_files(
     base_dir: &Path,
 ) -> DiagnosticReport {
     if changed_files.is_empty() {
-        // Retain only span-less diagnostics
-        let spanless: Vec<Diagnostic> = report
+        let spanless: Vec<CheckDiagnostic> = report
             .diagnostics
             .into_iter()
-            .filter(|d| d.span.is_none())
+            .filter(|d| d.span().is_none())
             .collect();
         return DiagnosticReport::new(spanless);
     }
 
-    let filtered: Vec<Diagnostic> = report
+    let filtered: Vec<CheckDiagnostic> = report
         .diagnostics
         .into_iter()
-        .filter(|diag| {
-            let Some(span) = &diag.span else {
-                return true;
-            };
-
-            let file = &span.file;
-
-            // Direct match
-            if changed_files.contains(file) {
-                return true;
-            }
-
-            // Relative match against base_dir
-            if let Ok(rel) = file.strip_prefix(base_dir)
-                && changed_files.contains(rel)
-            {
-                return true;
-            }
-
-            // Match if any changed file ends with this file path
-            for changed in changed_files {
-                if file.ends_with(changed) || changed.ends_with(file) {
-                    return true;
-                }
-            }
-
-            false
-        })
+        .filter(|diag| is_diagnostic_in_changed_files(diag, changed_files, base_dir))
         .collect();
 
     DiagnosticReport::new(filtered)
 }
 
+fn is_diagnostic_in_changed_files(
+    diag: &CheckDiagnostic,
+    changed_files: &HashSet<PathBuf>,
+    base_dir: &Path,
+) -> bool {
+    let Some(span) = diag.span() else {
+        return true;
+    };
+
+    let file = &span.file;
+    if changed_files.contains(file) {
+        return true;
+    }
+
+    if let Ok(rel) = file.strip_prefix(base_dir)
+        && changed_files.contains(rel)
+    {
+        return true;
+    }
+
+    changed_files
+        .iter()
+        .any(|changed| file.ends_with(changed) || changed.ends_with(file))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::diagnostics::{Diagnostic, Span};
+    use crate::tools::{ClippyDiagnostic, FmtDiagnostic};
     use googletest::prelude::*;
-    use purist::{Severity, Span};
 
     #[googletest::test]
     fn parse_jj_diff_summary_extracts_modified_and_added_files()
@@ -202,13 +189,18 @@ C template.rs -> generated.rs
         let mut changed = HashSet::new();
         changed.insert(PathBuf::from("src/main.rs"));
 
-        let report = DiagnosticReport::new(vec![
-            Diagnostic::new("rule::keep", Severity::Warning, "in changed file")
-                .with_span(Span::new("src/main.rs", 10, 1, 10, 1)),
-            Diagnostic::new("rule::drop", Severity::Warning, "in unchanged file")
-                .with_span(Span::new("src/other.rs", 5, 1, 5, 1)),
-            Diagnostic::new("rule::global", Severity::Error, "workspace global"),
-        ]);
+        let mut report = DiagnosticReport::default();
+        report.add(FmtDiagnostic::FormattingDiff {
+            file: "src/main.rs".to_string(),
+            span: Span::new("src/main.rs", 10, 1, 10, 1),
+        });
+        report.add(FmtDiagnostic::FormattingDiff {
+            file: "src/other.rs".to_string(),
+            span: Span::new("src/other.rs", 5, 1, 5, 1),
+        });
+        report.add(ClippyDiagnostic::ExecutionFailure {
+            details: "workspace global".to_string(),
+        });
 
         let filtered = filter_diagnostics_by_changed_files(report, &changed, Path::new("."));
 
@@ -221,8 +213,14 @@ C template.rs -> generated.rs
             .diagnostics
             .get(1)
             .ok_or("expected second diagnostic")?;
-        assert_that!(&first.rule, eq("rule::keep"));
-        assert_that!(&second.rule, eq("rule::global"));
+        assert_that!(
+            first.code().map(|c| c.to_string()),
+            some(eq("fmt::formatting"))
+        );
+        assert_that!(
+            second.code().map(|c| c.to_string()),
+            some(eq("clippy::execution"))
+        );
         assert_that!(filtered.warning_count(), eq(1));
         assert_that!(filtered.error_count(), eq(1));
         Ok(())
@@ -232,16 +230,22 @@ C template.rs -> generated.rs
     fn filter_diagnostics_with_empty_changed_set_drops_file_diagnostics()
     -> Result<(), Box<dyn std::error::Error>> {
         let empty_changed = HashSet::new();
-        let report = DiagnosticReport::new(vec![
-            Diagnostic::new("rule::file", Severity::Warning, "file diagnostic")
-                .with_span(Span::new("src/lib.rs", 1, 1, 1, 1)),
-            Diagnostic::new("rule::global", Severity::Error, "global diagnostic"),
-        ]);
+        let mut report = DiagnosticReport::default();
+        report.add(FmtDiagnostic::FormattingDiff {
+            file: "src/lib.rs".to_string(),
+            span: Span::new("src/lib.rs", 1, 1, 1, 1),
+        });
+        report.add(ClippyDiagnostic::ExecutionFailure {
+            details: "global diagnostic".to_string(),
+        });
 
         let filtered = filter_diagnostics_by_changed_files(report, &empty_changed, Path::new("."));
         assert_that!(filtered.diagnostics.len(), eq(1));
         let first = filtered.diagnostics.first().ok_or("expected diagnostic")?;
-        assert_that!(&first.rule, eq("rule::global"));
+        assert_that!(
+            first.code().map(|c| c.to_string()),
+            some(eq("clippy::execution"))
+        );
         Ok(())
     }
 }

@@ -1,7 +1,45 @@
 use super::file_utils::normalize_path;
-use purist::{Diagnostic, Severity, Span};
+use crate::diagnostics::Span;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+/// Diagnostics emitted by [`FmtRunner`].
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, miette::Diagnostic)]
+pub enum FmtDiagnostic {
+    /// A Rust source file has formatting differences reported by `rustfmt`.
+    #[error("Source code formatting in '{file}' does not conform to rustfmt standards")]
+    #[diagnostic(
+        code(fmt::formatting),
+        severity(Warning),
+        help("Run 'cargo fmt' to format '{file}'")
+    )]
+    FormattingDiff {
+        file: String,
+        #[source_code]
+        #[label]
+        span: Span,
+    },
+
+    /// `cargo fmt` exited with a non-zero status without file-level diff headers.
+    #[error("{details}")]
+    #[diagnostic(
+        code(fmt::formatting),
+        severity(Warning),
+        help("Run 'cargo fmt' to format the codebase")
+    )]
+    ExecutionFailure { details: String },
+}
+
+impl FmtDiagnostic {
+    /// Returns the source [`Span`] associated with this diagnostic, if any.
+    pub const fn span(&self) -> Option<&Span> {
+        match self {
+            Self::FormattingDiff { span, .. } => Some(span),
+            Self::ExecutionFailure { .. } => None,
+        }
+    }
+}
 
 /// Runner for `cargo fmt --check`.
 pub struct FmtRunner {
@@ -17,7 +55,7 @@ impl FmtRunner {
     }
 
     /// Executes `cargo fmt --check` and returns collected diagnostics.
-    pub fn run(&self) -> Result<Vec<Diagnostic>, std::io::Error> {
+    pub fn run(&self) -> Result<Vec<FmtDiagnostic>, io::Error> {
         let manifest_path = if self.target_path.is_file() {
             self.target_path.clone()
         } else {
@@ -41,7 +79,7 @@ impl FmtRunner {
         let mut diagnostics = parse_fmt_output(&combined, &self.target_path);
 
         if !output.status.success() && diagnostics.is_empty() {
-            let error_msg = if !stderr.trim().is_empty() {
+            let details = if !stderr.trim().is_empty() {
                 stderr.trim().to_string()
             } else if !stdout.trim().is_empty() {
                 stdout.trim().to_string()
@@ -49,10 +87,7 @@ impl FmtRunner {
                 "Formatting check failed with non-zero exit code".to_string()
             };
 
-            diagnostics.push(
-                Diagnostic::new("fmt::formatting", Severity::Warning, error_msg)
-                    .with_suggested_fix("Run 'cargo fmt' to format the codebase"),
-            );
+            diagnostics.push(FmtDiagnostic::ExecutionFailure { details });
         }
 
         Ok(diagnostics)
@@ -71,7 +106,7 @@ fn parse_fmt_diff_header(line: &str) -> Option<(&str, usize)> {
 }
 
 /// Parses the output of `cargo fmt --check` into structured diagnostics.
-pub fn parse_fmt_output(output: &str, target_dir: &Path) -> Vec<Diagnostic> {
+pub fn parse_fmt_output(output: &str, target_dir: &Path) -> Vec<FmtDiagnostic> {
     let mut diagnostics = Vec::new();
 
     for line in output.lines() {
@@ -80,18 +115,11 @@ pub fn parse_fmt_output(output: &str, target_dir: &Path) -> Vec<Diagnostic> {
         if let Some((file_str, line_num)) = parse_fmt_diff_header(line) {
             let normalized_path = normalize_path(Path::new(file_str), target_dir);
             let span = Span::new(normalized_path, line_num, 1, line_num, 1);
-            diagnostics.push(
-                Diagnostic::new(
-                    "fmt::formatting",
-                    Severity::Warning,
-                    format!(
-                        "Source code formatting in '{}' does not conform to rustfmt standards",
-                        file_str
-                    ),
-                )
-                .with_span(span)
-                .with_suggested_fix(format!("Run 'cargo fmt' to format '{file_str}'")),
-            );
+
+            diagnostics.push(FmtDiagnostic::FormattingDiff {
+                file: file_str.to_string(),
+                span,
+            });
         }
     }
 
@@ -101,13 +129,13 @@ pub fn parse_fmt_output(output: &str, target_dir: &Path) -> Vec<Diagnostic> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::diagnostics::{Diagnostic, Severity};
     use googletest::prelude::*;
 
     #[googletest::test]
     fn parse_clean_fmt_output_returns_empty_diagnostics() -> Result<(), Box<dyn std::error::Error>>
     {
-        let output = "";
-        let diags = parse_fmt_output(output, Path::new("."));
+        let diags = parse_fmt_output("", Path::new("."));
         assert_that!(diags.is_empty(), is_true());
         Ok(())
     }
@@ -127,19 +155,22 @@ Diff in /workspace/src/main.rs at line 12:
         assert_that!(diags.len(), eq(2));
 
         let first = diags.first().ok_or("expected first diagnostic")?;
-        assert_that!(&first.rule, eq("fmt::formatting"));
-        assert_that!(first.severity, eq(Severity::Warning));
         assert_that!(
-            &first.message,
+            first.code().map(|c| c.to_string()),
+            some(eq("fmt::formatting"))
+        );
+        assert_that!(first.severity(), some(eq(Severity::Warning)));
+        assert_that!(
+            first.to_string(),
             contains_substring("Source code formatting in '/workspace/src/lib.rs'")
         );
 
-        let span = first.span.as_ref().ok_or("expected span")?;
+        let span = first.span().ok_or("expected span")?;
         assert_that!(span.file, eq(&PathBuf::from("src/lib.rs")));
         assert_that!(span.start_line, eq(25));
 
         let second = diags.get(1).ok_or("expected second diagnostic")?;
-        let span2 = second.span.as_ref().ok_or("expected span")?;
+        let span2 = second.span().ok_or("expected span")?;
         assert_that!(span2.file, eq(&PathBuf::from("src/main.rs")));
         assert_that!(span2.start_line, eq(12));
         Ok(())
@@ -152,7 +183,7 @@ Diff in /workspace/src/main.rs at line 12:
         assert_that!(diags.len(), eq(1));
 
         let diag = diags.first().ok_or("expected diagnostic")?;
-        let span = diag.span.as_ref().ok_or("expected span")?;
+        let span = diag.span().ok_or("expected span")?;
         assert_that!(span.file, eq(&PathBuf::from("src/foo.rs")));
         assert_that!(span.start_line, eq(42));
         Ok(())
@@ -173,12 +204,12 @@ Diff in src/main.rs:12:
         assert_that!(diags.len(), eq(2));
 
         let first = diags.first().ok_or("expected first diagnostic")?;
-        let span1 = first.span.as_ref().ok_or("expected first span")?;
+        let span1 = first.span().ok_or("expected first span")?;
         assert_that!(span1.file, eq(&PathBuf::from("src/lib.rs")));
         assert_that!(span1.start_line, eq(25));
 
         let second = diags.get(1).ok_or("expected second diagnostic")?;
-        let span2 = second.span.as_ref().ok_or("expected second span")?;
+        let span2 = second.span().ok_or("expected second span")?;
         assert_that!(span2.file, eq(&PathBuf::from("src/main.rs")));
         assert_that!(span2.start_line, eq(12));
         Ok(())

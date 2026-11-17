@@ -1,8 +1,47 @@
 use super::file_utils::{find_files_with_extensions, is_tool_available, normalize_path};
-use purist::{Diagnostic, Severity, Span};
+use crate::diagnostics::Span;
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+/// Diagnostics emitted by [`JsonRunner`].
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, miette::Diagnostic)]
+pub enum JsonDiagnostic {
+    /// JSON file does not match Prettier formatting rules.
+    #[error("JSON formatting in '{file}' does not conform to prettier standards")]
+    #[diagnostic(
+        code(fmt::json),
+        severity(Warning),
+        help("Run 'prettier --write {file}' to format")
+    )]
+    Formatting {
+        file: String,
+        #[source_code]
+        #[label]
+        span: Span,
+    },
+
+    /// JSON syntax error reported by Prettier or `serde_json`.
+    #[error("JSON syntax error in '{file}': {details}")]
+    #[diagnostic(code(json::syntax), severity(Error))]
+    SyntaxError {
+        file: String,
+        details: String,
+        #[source_code]
+        #[label]
+        span: Span,
+    },
+}
+
+impl JsonDiagnostic {
+    /// Returns the source [`Span`] associated with this diagnostic.
+    pub const fn span(&self) -> &Span {
+        match self {
+            Self::Formatting { span, .. } | Self::SyntaxError { span, .. } => span,
+        }
+    }
+}
 
 /// Runner for JSON checks and formatters (Prettier or in-process serde_json).
 pub struct JsonRunner {
@@ -18,7 +57,7 @@ impl JsonRunner {
     }
 
     /// Executes JSON checks using `prettier` if available, or in-process syntax validation.
-    pub fn run(&self) -> Result<Vec<Diagnostic>, std::io::Error> {
+    pub fn run(&self) -> Result<Vec<JsonDiagnostic>, io::Error> {
         let files = find_files_with_extensions(&self.target_path, &["json"]);
         if files.is_empty() {
             return Ok(Vec::new());
@@ -31,7 +70,7 @@ impl JsonRunner {
         }
     }
 
-    fn run_prettier(&self, files: &[PathBuf]) -> Result<Vec<Diagnostic>, std::io::Error> {
+    fn run_prettier(&self, files: &[PathBuf]) -> Result<Vec<JsonDiagnostic>, io::Error> {
         let mut cmd = Command::new("prettier");
         cmd.arg("--check");
         for file in files {
@@ -49,7 +88,7 @@ impl JsonRunner {
     fn run_in_process_syntax_check(
         &self,
         files: &[PathBuf],
-    ) -> Result<Vec<Diagnostic>, std::io::Error> {
+    ) -> Result<Vec<JsonDiagnostic>, io::Error> {
         let mut diagnostics = Vec::new();
 
         for file in files {
@@ -62,14 +101,11 @@ impl JsonRunner {
                 let col = err.column();
                 let normalized = normalize_path(file, &self.target_path);
                 let span = Span::new(normalized, line, col, line, col);
-                diagnostics.push(
-                    Diagnostic::new(
-                        "json::syntax",
-                        Severity::Error,
-                        format!("JSON syntax error in '{}': {err}", file.display()),
-                    )
-                    .with_span(span),
-                );
+                diagnostics.push(JsonDiagnostic::SyntaxError {
+                    file: file.display().to_string(),
+                    details: err.to_string(),
+                    span,
+                });
             }
         }
 
@@ -78,7 +114,7 @@ impl JsonRunner {
 }
 
 /// Parses the output of `prettier --check` on JSON files.
-pub fn parse_prettier_json_output(output: &str, base_dir: &Path) -> Vec<Diagnostic> {
+pub fn parse_prettier_json_output(output: &str, base_dir: &Path) -> Vec<JsonDiagnostic> {
     let mut diagnostics = Vec::new();
 
     for line in output.lines() {
@@ -96,18 +132,10 @@ pub fn parse_prettier_json_output(output: &str, base_dir: &Path) -> Vec<Diagnost
             let path = PathBuf::from(file_str);
             let normalized = normalize_path(&path, base_dir);
             let span = Span::new(normalized, 1, 1, 1, 1);
-            diagnostics.push(
-                Diagnostic::new(
-                    "fmt::json",
-                    Severity::Warning,
-                    format!(
-                        "JSON formatting in '{}' does not conform to prettier standards",
-                        file_str
-                    ),
-                )
-                .with_span(span)
-                .with_suggested_fix(format!("Run 'prettier --write {file_str}' to format")),
-            );
+            diagnostics.push(JsonDiagnostic::Formatting {
+                file: file_str.to_string(),
+                span,
+            });
         } else if let Some((_, rest)) = trimmed.split_once("[error] ")
             && let Some((file_part, err_msg)) = rest.split_once(':')
         {
@@ -115,14 +143,11 @@ pub fn parse_prettier_json_output(output: &str, base_dir: &Path) -> Vec<Diagnost
             let path = PathBuf::from(file_str);
             let normalized = normalize_path(&path, base_dir);
             let span = Span::new(normalized, 1, 1, 1, 1);
-            diagnostics.push(
-                Diagnostic::new(
-                    "json::syntax",
-                    Severity::Error,
-                    format!("Syntax error in '{file_str}': {}", err_msg.trim()),
-                )
-                .with_span(span),
-            );
+            diagnostics.push(JsonDiagnostic::SyntaxError {
+                file: file_str.to_string(),
+                details: err_msg.trim().to_string(),
+                span,
+            });
         }
     }
 
@@ -132,6 +157,7 @@ pub fn parse_prettier_json_output(output: &str, base_dir: &Path) -> Vec<Diagnost
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::diagnostics::{Diagnostic, Severity};
     use googletest::prelude::*;
     use tempfile::tempdir;
 
@@ -148,11 +174,11 @@ Checking formatting...
         let diags = parse_prettier_json_output(sample, base);
         expect_that!(diags.len(), eq(2));
         let d0 = diags.first().ok_or("missing diag 0")?;
-        expect_that!(&d0.rule, eq("fmt::json"));
-        expect_that!(d0.severity, eq(Severity::Warning));
+        expect_that!(d0.code().map(|c| c.to_string()), some(eq("fmt::json")));
+        expect_that!(d0.severity(), some(eq(Severity::Warning)));
         let d1 = diags.get(1).ok_or("missing diag 1")?;
-        expect_that!(&d1.rule, eq("json::syntax"));
-        expect_that!(d1.severity, eq(Severity::Error));
+        expect_that!(d1.code().map(|c| c.to_string()), some(eq("json::syntax")));
+        expect_that!(d1.severity(), some(eq(Severity::Error)));
         Ok(())
     }
 
@@ -172,8 +198,8 @@ Checking formatting...
 
         expect_that!(diags.len(), eq(1));
         let d0 = diags.first().ok_or("missing diag 0")?;
-        expect_that!(&d0.rule, eq("json::syntax"));
-        expect_that!(d0.severity, eq(Severity::Error));
+        expect_that!(d0.code().map(|c| c.to_string()), some(eq("json::syntax")));
+        expect_that!(d0.severity(), some(eq(Severity::Error)));
         Ok(())
     }
 }

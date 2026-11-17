@@ -7,15 +7,17 @@
 ### Structs
 
 - `pub struct CheckCommand { /* no public fields */ }` — _Arguments for the check aggregator subcommand._
+- `pub struct DiagnosticReport { pub diagnostics: Vec < CheckDiagnostic > }` — _An aggregated container of all [`CheckDiagnostic`] findings produced during a check run._
 
 ### Enums
 
-- `pub enum CheckError { PathNotFound(PathBuf), Vcs(JjError), Api(ApiError), Io(std :: io :: Error), ViolationsFound { count: usize } }` — _Error type for check aggregator execution._
+- `pub enum CheckDiagnostic { Fmt(FmtDiagnostic), Clippy(ClippyDiagnostic), Purist(PuristDiagnostic), Audit(AuditDiagnostic), Markdown(MarkdownDiagnostic), Toml(TomlDiagnostic), Json(JsonDiagnostic), Api(ApiDiagnostic) }` — _Top-level `miette::Diagnostic` enum encompassing all findings produced by `code-review-check`._
+- `pub enum CheckError { PathNotFound(PathBuf), Vcs(JjError), Api(ApiError), Io(io :: Error), ViolationsFound { count: usize } }` — _Error type for check aggregator execution._
 - `pub enum FailOn { Warnings, Errors }` — _Severity threshold triggering non-zero exit code._
 
 ### Functions
 
-- `pub fn aggregate_diagnostics(fmt_diags: Vec < Diagnostic >, clippy_diags: Vec < Diagnostic >, purist_report: DiagnosticReport, audit_diags: Vec < Diagnostic >, markdown_diags: Vec < Diagnostic >, toml_diags: Vec < Diagnostic >, json_diags: Vec < Diagnostic >) -> DiagnosticReport` — _Aggregates diagnostics from multiple checking tools into a consolidated `DiagnosticReport`._
+- `pub fn render_report(report: & DiagnosticReport, format: OutputFormat, writer: & mut dyn io :: Write) -> io :: Result < () >` — _Renders a diagnostic report to the specified writer in the chosen format._
 
 ### Methods
 
@@ -29,7 +31,6 @@
 - `pub fn CheckCommand::is_fmt_enabled(& self) -> bool` — _Returns whether cargo fmt is enabled._
 - `pub fn CheckCommand::is_json_enabled(& self) -> bool` — _Returns whether JSON checks are enabled._
 - `pub fn CheckCommand::is_markdown_enabled(& self) -> bool` — _Returns whether markdown checks are enabled._
-- `pub fn CheckCommand::is_opinionated_enabled(& self) -> bool` — _Backwards compatibility alias for `is_purist_enabled`._
 - `pub fn CheckCommand::is_purist_enabled(& self) -> bool` — _Returns whether purist AST linter is enabled._
 - `pub fn CheckCommand::is_quiet(& self) -> bool` — _Returns whether logging output is suppressed._
 - `pub fn CheckCommand::is_toml_enabled(& self) -> bool` — _Returns whether TOML checks are enabled._
@@ -45,23 +46,41 @@
 - `pub fn CheckCommand::with_format(mut self, format: OutputFormat) -> Self` — _Sets the output format._
 - `pub fn CheckCommand::with_json(mut self, enabled: bool) -> Self` — _Enables or disables JSON format/lint checks._
 - `pub fn CheckCommand::with_markdown(mut self, enabled: bool) -> Self` — _Enables or disables markdown format/lint checks._
-- `pub fn CheckCommand::with_opinionated(self, enabled: bool) -> Self` — _Backwards compatibility alias for `with_purist`._
 - `pub fn CheckCommand::with_purist(mut self, enabled: bool) -> Self` — _Enables or disables purist AST linter checks._
 - `pub fn CheckCommand::with_toml(mut self, enabled: bool) -> Self` — _Enables or disables TOML format/lint checks._
+- `pub fn CheckDiagnostic::span(& self) -> Option < & Span >` — _Returns the source [`Span`] associated with this diagnostic, if anchored to a file._
+- `pub fn DiagnosticReport::add(& mut self, diag: impl Into < CheckDiagnostic >)` — _Adds a diagnostic to the report and updates summary metrics._
+- `pub fn DiagnosticReport::advice_count(& self) -> usize` — _Returns the total count of advice/hint diagnostics._
+- `pub fn DiagnosticReport::error_count(& self) -> usize` — _Returns the total count of error diagnostics._
+- `pub fn DiagnosticReport::has_errors(& self) -> bool` — _Returns true if any diagnostic has error severity._
+- `pub fn DiagnosticReport::is_empty(& self) -> bool` — _Returns true if there are no diagnostics in the report._
+- `pub fn DiagnosticReport::new(diagnostics: Vec < CheckDiagnostic >) -> Self` — _Creates a new diagnostic report with the given diagnostics, automatically computing summary counts._
+- `pub fn DiagnosticReport::warning_count(& self) -> usize` — _Returns the total count of warning diagnostics._
 
 ### Re-exports
 
+- `pub use tools::ApiDiagnostic;`
 - `pub use tools::ApiError;`
 - `pub use tools::ApiRunner;`
+- `pub use tools::AuditDiagnostic;`
 - `pub use tools::AuditRunner;`
+- `pub use tools::ClippyDiagnostic;`
 - `pub use tools::ClippyRunner;`
+- `pub use diagnostics::Diagnostic;`
+- `pub use tools::FmtDiagnostic;`
 - `pub use tools::FmtRunner;`
 - `pub use tools::JjError;`
 - `pub use tools::JjVcs;`
+- `pub use tools::JsonDiagnostic;`
 - `pub use tools::JsonRunner;`
+- `pub use tools::MarkdownDiagnostic;`
 - `pub use tools::MarkdownRunner;`
-- `pub use tools::OpinionatedRunner;`
+- `pub use reporter::OutputFormat;`
+- `pub use diagnostics::PuristDiagnostic;`
 - `pub use tools::PuristRunner;`
+- `pub use diagnostics::Severity;`
+- `pub use diagnostics::Span;`
+- `pub use tools::TomlDiagnostic;`
 - `pub use tools::TomlRunner;`
 - `pub use tools::filter_diagnostics_by_changed_files;`
 

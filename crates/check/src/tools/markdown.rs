@@ -1,7 +1,62 @@
 use super::file_utils::{find_files_with_extensions, is_tool_available, normalize_path};
-use purist::{Diagnostic, Severity, Span};
+use crate::diagnostics::Span;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+/// Diagnostics emitted by [`MarkdownRunner`].
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, miette::Diagnostic)]
+pub enum MarkdownDiagnostic {
+    /// Markdown file does not match Prettier formatting rules.
+    #[error("Markdown formatting in '{file}' does not conform to prettier standards")]
+    #[diagnostic(
+        code(fmt::markdown),
+        severity(Warning),
+        help("Run 'prettier --write {file}' to format")
+    )]
+    PrettierFormatting {
+        file: String,
+        #[source_code]
+        #[label]
+        span: Span,
+    },
+
+    /// Markdown file does not match mdformat formatting rules.
+    #[error("Markdown formatting in '{file}' does not conform to mdformat standards")]
+    #[diagnostic(
+        code(fmt::markdown),
+        severity(Warning),
+        help("Run 'mdformat {file}' to format")
+    )]
+    MdformatFormatting {
+        file: String,
+        #[source_code]
+        #[label]
+        span: Span,
+    },
+
+    /// Markdown syntax error reported by Prettier.
+    #[error("Syntax error in '{file}': {details}")]
+    #[diagnostic(code(fmt::markdown), severity(Error))]
+    SyntaxError {
+        file: String,
+        details: String,
+        #[source_code]
+        #[label]
+        span: Span,
+    },
+}
+
+impl MarkdownDiagnostic {
+    /// Returns the source [`Span`] associated with this diagnostic.
+    pub const fn span(&self) -> &Span {
+        match self {
+            Self::PrettierFormatting { span, .. }
+            | Self::MdformatFormatting { span, .. }
+            | Self::SyntaxError { span, .. } => span,
+        }
+    }
+}
 
 /// Runner for Markdown checks and formatters (Prettier / mdformat).
 pub struct MarkdownRunner {
@@ -17,7 +72,7 @@ impl MarkdownRunner {
     }
 
     /// Executes markdown checks using the first available tool (`prettier` or `mdformat`).
-    pub fn run(&self) -> Result<Vec<Diagnostic>, std::io::Error> {
+    pub fn run(&self) -> Result<Vec<MarkdownDiagnostic>, io::Error> {
         let files = find_files_with_extensions(&self.target_path, &["md"]);
         if files.is_empty() {
             return Ok(Vec::new());
@@ -32,7 +87,7 @@ impl MarkdownRunner {
         }
     }
 
-    fn run_prettier(&self, files: &[PathBuf]) -> Result<Vec<Diagnostic>, std::io::Error> {
+    fn run_prettier(&self, files: &[PathBuf]) -> Result<Vec<MarkdownDiagnostic>, io::Error> {
         let mut cmd = Command::new("prettier");
         cmd.arg("--check");
         for file in files {
@@ -47,7 +102,7 @@ impl MarkdownRunner {
         Ok(parse_prettier_markdown_output(&combined, &self.target_path))
     }
 
-    fn run_mdformat(&self, files: &[PathBuf]) -> Result<Vec<Diagnostic>, std::io::Error> {
+    fn run_mdformat(&self, files: &[PathBuf]) -> Result<Vec<MarkdownDiagnostic>, io::Error> {
         let mut cmd = Command::new("mdformat");
         cmd.arg("--check");
         for file in files {
@@ -64,7 +119,7 @@ impl MarkdownRunner {
 }
 
 /// Parses the output of `prettier --check` on Markdown files.
-pub fn parse_prettier_markdown_output(output: &str, base_dir: &Path) -> Vec<Diagnostic> {
+pub fn parse_prettier_markdown_output(output: &str, base_dir: &Path) -> Vec<MarkdownDiagnostic> {
     let mut diagnostics = Vec::new();
 
     for line in output.lines() {
@@ -82,18 +137,10 @@ pub fn parse_prettier_markdown_output(output: &str, base_dir: &Path) -> Vec<Diag
             let path = PathBuf::from(file_str);
             let normalized = normalize_path(&path, base_dir);
             let span = Span::new(normalized, 1, 1, 1, 1);
-            diagnostics.push(
-                Diagnostic::new(
-                    "fmt::markdown",
-                    Severity::Warning,
-                    format!(
-                        "Markdown formatting in '{}' does not conform to prettier standards",
-                        file_str
-                    ),
-                )
-                .with_span(span)
-                .with_suggested_fix(format!("Run 'prettier --write {file_str}' to format")),
-            );
+            diagnostics.push(MarkdownDiagnostic::PrettierFormatting {
+                file: file_str.to_string(),
+                span,
+            });
         } else if let Some((_, rest)) = trimmed.split_once("[error] ")
             && let Some((file_part, err_msg)) = rest.split_once(':')
         {
@@ -101,14 +148,11 @@ pub fn parse_prettier_markdown_output(output: &str, base_dir: &Path) -> Vec<Diag
             let path = PathBuf::from(file_str);
             let normalized = normalize_path(&path, base_dir);
             let span = Span::new(normalized, 1, 1, 1, 1);
-            diagnostics.push(
-                Diagnostic::new(
-                    "fmt::markdown",
-                    Severity::Error,
-                    format!("Syntax error in '{file_str}': {}", err_msg.trim()),
-                )
-                .with_span(span),
-            );
+            diagnostics.push(MarkdownDiagnostic::SyntaxError {
+                file: file_str.to_string(),
+                details: err_msg.trim().to_string(),
+                span,
+            });
         }
     }
 
@@ -116,7 +160,7 @@ pub fn parse_prettier_markdown_output(output: &str, base_dir: &Path) -> Vec<Diag
 }
 
 /// Parses the output of `mdformat --check`.
-pub fn parse_mdformat_output(output: &str, base_dir: &Path) -> Vec<Diagnostic> {
+pub fn parse_mdformat_output(output: &str, base_dir: &Path) -> Vec<MarkdownDiagnostic> {
     let mut diagnostics = Vec::new();
 
     for line in output.lines() {
@@ -128,18 +172,10 @@ pub fn parse_mdformat_output(output: &str, base_dir: &Path) -> Vec<Diagnostic> {
             let path = PathBuf::from(file_str);
             let normalized = normalize_path(&path, base_dir);
             let span = Span::new(normalized, 1, 1, 1, 1);
-            diagnostics.push(
-                Diagnostic::new(
-                    "fmt::markdown",
-                    Severity::Warning,
-                    format!(
-                        "Markdown formatting in '{}' does not conform to mdformat standards",
-                        file_str
-                    ),
-                )
-                .with_span(span)
-                .with_suggested_fix(format!("Run 'mdformat {file_str}' to format")),
-            );
+            diagnostics.push(MarkdownDiagnostic::MdformatFormatting {
+                file: file_str.to_string(),
+                span,
+            });
         }
     }
 
@@ -149,6 +185,7 @@ pub fn parse_mdformat_output(output: &str, base_dir: &Path) -> Vec<Diagnostic> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::diagnostics::{Diagnostic, Severity};
     use googletest::prelude::*;
 
     #[googletest::test]
@@ -166,22 +203,19 @@ AGENTS.md[warn] AGENTS.md
         expect_that!(diags.len(), eq(3));
 
         let d0 = diags.first().ok_or("missing diag 0")?;
-        expect_that!(&d0.rule, eq("fmt::markdown"));
-        expect_that!(d0.severity, eq(Severity::Warning));
-        let span0 = d0.span.as_ref().ok_or("missing span 0")?;
-        expect_that!(span0.file, eq(Path::new("AGENTS.md")));
+        expect_that!(d0.code().map(|c| c.to_string()), some(eq("fmt::markdown")));
+        expect_that!(d0.severity(), some(eq(Severity::Warning)));
+        expect_that!(d0.span().file, eq(Path::new("AGENTS.md")));
 
         let d1 = diags.get(1).ok_or("missing diag 1")?;
-        expect_that!(&d1.rule, eq("fmt::markdown"));
-        expect_that!(d1.severity, eq(Severity::Warning));
-        let span1 = d1.span.as_ref().ok_or("missing span 1")?;
-        expect_that!(span1.file, eq(Path::new("SPEC.md")));
+        expect_that!(d1.code().map(|c| c.to_string()), some(eq("fmt::markdown")));
+        expect_that!(d1.severity(), some(eq(Severity::Warning)));
+        expect_that!(d1.span().file, eq(Path::new("SPEC.md")));
 
         let d2 = diags.get(2).ok_or("missing diag 2")?;
-        expect_that!(&d2.rule, eq("fmt::markdown"));
-        expect_that!(d2.severity, eq(Severity::Error));
-        let span2 = d2.span.as_ref().ok_or("missing span 2")?;
-        expect_that!(span2.file, eq(Path::new("broken.md")));
+        expect_that!(d2.code().map(|c| c.to_string()), some(eq("fmt::markdown")));
+        expect_that!(d2.severity(), some(eq(Severity::Error)));
+        expect_that!(d2.span().file, eq(Path::new("broken.md")));
         Ok(())
     }
 
@@ -196,14 +230,12 @@ Error: File \"/workspace/AGENTS.md\" is not formatted.
         expect_that!(diags.len(), eq(2));
 
         let d0 = diags.first().ok_or("missing diag 0")?;
-        expect_that!(&d0.rule, eq("fmt::markdown"));
-        let span0 = d0.span.as_ref().ok_or("missing span 0")?;
-        expect_that!(span0.file, eq(Path::new("README.md")));
+        expect_that!(d0.code().map(|c| c.to_string()), some(eq("fmt::markdown")));
+        expect_that!(d0.span().file, eq(Path::new("README.md")));
 
         let d1 = diags.get(1).ok_or("missing diag 1")?;
-        expect_that!(&d1.rule, eq("fmt::markdown"));
-        let span1 = d1.span.as_ref().ok_or("missing span 1")?;
-        expect_that!(span1.file, eq(Path::new("AGENTS.md")));
+        expect_that!(d1.code().map(|c| c.to_string()), some(eq("fmt::markdown")));
+        expect_that!(d1.span().file, eq(Path::new("AGENTS.md")));
         Ok(())
     }
 }

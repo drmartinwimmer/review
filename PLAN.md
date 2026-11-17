@@ -477,9 +477,9 @@ When an agent reviews code, it dispatches specialized review subagents in parall
 ### Milestone 8: Thematic Subagent Review Skills Suite (including API & Dependencies)
 
 - **Description:** Create thematic review skills under `skills/` (`reviewing-spec-compliance`, `reviewing-rust-modularity`, `reviewing-rust-robustness`, `reviewing-rust-testing`, `reviewing-rust-lint-hygiene`, `reviewing-containment-safety`, `reviewing-api-surface`, and `reviewing-dependencies`) with frontmatter, checklists, rationalization tables, and subagent prompts.
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Target Completion Date:** 2026-10-27
-- **Actual Completion Date:** -
+- **Actual Completion Date:** 2026-11-17
 - **Dependencies:** Milestone 7
 - **Tasks File:** `plan/M8.md`
 - **Feedback File:** `plan/FEEDBACK_M8.md`
@@ -658,7 +658,7 @@ When an agent reviews code, it dispatches specialized review subagents in parall
   - Author `skills/reviewing-dependencies/SKILL.md`.
   - Focus on YAGNI/minimalism (stdlib vs crate), popularity & established ecosystem alternatives (`cargo info`, download counts, de facto standards), maintenance health, vulnerability checking (`cargo audit`), transitive dependency weight (`cargo tree`), build script risks (`build.rs`), and license compliance.
   - Describe Jujutsu change: `jj --no-pager describe -m "feat(skills): author reviewing-dependencies skill playbook"`
-- [ ] **M8-T3: Remaining Review Skills Playbooks (`skills/reviewing-*/SKILL.md`)**
+- [x] **M8-T3: Remaining Review Skills Playbooks (`skills/reviewing-*/SKILL.md`)**
   - Implement `reviewing-spec-compliance/SKILL.md`.
   - Implement `reviewing-rust-modularity/SKILL.md`.
   - Implement `reviewing-rust-robustness/SKILL.md`.

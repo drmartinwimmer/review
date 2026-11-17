@@ -12,7 +12,7 @@ This document serves as an asynchronous feedback template for human review. Huma
 
 - [x] **M8-T0: Skills Specifications (`skills/reviewing-*/SPEC.md`, `plan/M8.md`, `plan/FEEDBACK_M8.md`)**
 - [x] **M8-T1: API Surface Review Skill (`skills/reviewing-api-surface/SKILL.md`)**
-- [ ] **M8-T2: Dependency Hygiene & Security Review Skill (`skills/reviewing-dependencies/SKILL.md`)**
+- [x] **M8-T2: Dependency Hygiene & Security Review Skill (`skills/reviewing-dependencies/SKILL.md`)**
 - [ ] **M8-T3: Remaining Review Skills Playbooks (`skills/reviewing-*/SKILL.md`) & Milestone 8 Completion**
 
 ---

@@ -654,7 +654,7 @@ When an agent reviews code, it dispatches specialized review subagents in parall
   - Author `skills/reviewing-api-surface/SKILL.md`.
   - Focus on API minimalism (`pub(crate)` vs `pub`), reviewing `API.md` diffs, deprecating superseded APIs (`#[deprecated]`), and migration path clarity.
   - Describe Jujutsu change: `jj --no-pager describe -m "feat(skills): author reviewing-api-surface skill playbook"`
-- [ ] **M8-T2: Dependency Hygiene & Security Review Skill (`skills/reviewing-dependencies/SKILL.md`)**
+- [x] **M8-T2: Dependency Hygiene & Security Review Skill (`skills/reviewing-dependencies/SKILL.md`)**
   - Author `skills/reviewing-dependencies/SKILL.md`.
   - Focus on YAGNI/minimalism (stdlib vs crate), popularity & established ecosystem alternatives (`cargo info`, download counts, de facto standards), maintenance health, vulnerability checking (`cargo audit`), transitive dependency weight (`cargo tree`), build script risks (`build.rs`), and license compliance.
   - Describe Jujutsu change: `jj --no-pager describe -m "feat(skills): author reviewing-dependencies skill playbook"`

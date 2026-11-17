@@ -467,9 +467,9 @@ When an agent reviews code, it dispatches specialized review subagents in parall
 ### Milestone 7: Feedback Distillation & Reflection Skill
 
 - **Description:** Create `skills/distilling-feedback/SKILL.md` and `SPEC.md` defining the workflow for analyzing past session transcripts (`transcript.jsonl`), categorizing failures, and distilling new review guidelines and test cases.
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Target Completion Date:** 2026-10-24
-- **Actual Completion Date:** -
+- **Actual Completion Date:** 2026-11-17
 - **Dependencies:** Milestone 6
 - **Tasks File:** `plan/M7.md`
 - **Feedback File:** `plan/FEEDBACK_M7.md`
@@ -640,7 +640,7 @@ When an agent reviews code, it dispatches specialized review subagents in parall
 - [x] **M7-T0: Skill Specification (`skills/distilling-feedback/SPEC.md`, `plan/M7.md`, `plan/FEEDBACK_M7.md`)**
   - Specify the distillation process contracts, transcript parsing schemas, and output artifact requirements.
   - Describe Jujutsu change: `jj --no-pager describe -m "docs(skills): add spec for distilling-feedback skill"`
-- [ ] **M7-T1: Skill Playbook (`skills/distilling-feedback/SKILL.md`)**
+- [x] **M7-T1: Skill Playbook (`skills/distilling-feedback/SKILL.md`)**
   - Write concise, token-efficient playbook following `dev:writing-skills`.
   - Include triggers (`Use when analyzing past agent session logs...`), transcript parsing steps, failure categorization patterns, and guideline synthesis templates.
   - Describe Jujutsu change: `jj --no-pager describe -m "feat(skills): create distilling-feedback skill playbook"`

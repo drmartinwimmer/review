@@ -64,14 +64,15 @@ Options:
 - **Execution**: `cargo fmt --check [--manifest-path <path>]`
 - **Output Parsing**:
   - Exit code `0`: No formatting violations.
-  - Exit code `1`: Parse stderr/stdout for `Diff in <file> at line <line>:` patterns.
+  - Exit code `1`: Parse stderr/stdout for `Diff in <file>:<line>:` (Rust 1.100+) and `Diff in <file> at line <line>:` patterns.
   - Generates diagnostics with `rule: "fmt::formatting"`, `severity: Severity::Warning`, and a suggested fix `"Run 'cargo fmt' to format this file"`.
 
 ### 4.2 Cargo Clippy Runner (`tools/cargo_clippy.rs`)
 
 - **Execution**: `cargo clippy --all-targets --all-features --message-format=json`
 - **Output Parsing**:
-  - Reads line-delimited JSON objects.
+  - Parses Cargo manifest lint diagnostics (`cargo::*`, such as `cargo::unused_dependencies` and `cargo::non_kebab_case_packages`) emitted on `stderr`, extracting rule code, severity, `Cargo.toml` span, and help suggestions.
+  - Reads line-delimited JSON objects on `stdout`.
   - Filters for messages where `reason == "compiler-message"`.
   - Extracts `code.code` as the diagnostic rule identifier (e.g., `clippy::unwrap_used`, `clippy::redundant_clone`).
   - Maps `level` (`"error"` -> `Severity::Error`, `"warning"` -> `Severity::Warning`, `"note"` -> `Severity::Info`, `"help"` -> `Severity::Hint`).

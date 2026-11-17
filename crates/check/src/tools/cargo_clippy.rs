@@ -1,3 +1,4 @@
+use super::file_utils::normalize_path;
 use purist::{Diagnostic, Severity, Span};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -38,10 +39,11 @@ impl ClippyRunner {
 
         let output = cmd.output()?;
         let stdout = String::from_utf8_lossy(&output.stdout);
-        let mut diagnostics = parse_clippy_json_stream(&stdout, &self.target_path);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let mut diagnostics = parse_cargo_lint_stderr(&stderr, &self.target_path);
+        diagnostics.extend(parse_clippy_json_stream(&stdout, &self.target_path));
 
         if !output.status.success() && diagnostics.is_empty() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
             let error_msg = if !stderr.trim().is_empty() {
                 stderr.trim().to_string()
             } else {
@@ -150,16 +152,7 @@ pub fn parse_clippy_json_stream(stream: &str, target_dir: &Path) -> Vec<Diagnost
             .or_else(|| msg.spans.first());
 
         let span = primary_span.map(|s| {
-            let raw_path = PathBuf::from(&s.file_name);
-            let normalized_path = if raw_path.is_absolute() {
-                if let Ok(rel) = raw_path.strip_prefix(target_dir) {
-                    rel.to_path_buf()
-                } else {
-                    raw_path
-                }
-            } else {
-                raw_path
-            };
+            let normalized_path = normalize_path(Path::new(&s.file_name), target_dir);
 
             Span::new(
                 normalized_path,
@@ -212,6 +205,104 @@ fn extract_child_suggested_fix(children: &[RustcChildMessage]) -> Option<String>
     }
 
     fallback_message
+}
+
+struct RawCargoDiagnosticBlock<'a> {
+    severity: Severity,
+    message: &'a str,
+    lines: Vec<&'a str>,
+}
+
+fn parse_cargo_header(line: &str) -> Option<(Severity, &str)> {
+    if let Some(msg) = line.strip_prefix("warning: ") {
+        Some((Severity::Warning, msg.trim()))
+    } else {
+        line.strip_prefix("error: ")
+            .map(|msg| (Severity::Error, msg.trim()))
+    }
+}
+
+fn extract_cargo_lint_rule(lines: &[&str]) -> Option<String> {
+    for line in lines {
+        if let Some(after_note) = line.trim().strip_prefix("= note: `")
+            && let Some((rule, _)) = after_note.split_once('`')
+            && rule.starts_with("cargo::")
+        {
+            return Some(rule.to_string());
+        }
+    }
+    None
+}
+
+fn extract_cargo_lint_span(lines: &[&str], target_dir: &Path) -> Option<Span> {
+    for line in lines {
+        if let Some(loc) = line.trim().strip_prefix("--> ") {
+            let (before_col, col_str) = loc.rsplit_once(':')?;
+            let (file_str, line_str) = before_col.rsplit_once(':')?;
+            let line_num: usize = line_str.trim().parse().ok()?;
+            let col_num: usize = col_str.trim().parse().ok()?;
+            let normalized = normalize_path(Path::new(file_str.trim()), target_dir);
+            return Some(Span::new(normalized, line_num, col_num, line_num, col_num));
+        }
+    }
+    None
+}
+
+fn extract_cargo_lint_help(lines: &[&str]) -> Option<String> {
+    for line in lines {
+        if let Some(help) = line.trim().strip_prefix("help: ")
+            && !help.trim().is_empty()
+        {
+            return Some(help.trim().to_string());
+        }
+    }
+    None
+}
+
+fn build_cargo_lint_diagnostic(
+    block: RawCargoDiagnosticBlock<'_>,
+    target_dir: &Path,
+) -> Option<Diagnostic> {
+    let rule = extract_cargo_lint_rule(&block.lines)?;
+    let mut diag = Diagnostic::new(rule, block.severity, block.message);
+    if let Some(span) = extract_cargo_lint_span(&block.lines, target_dir) {
+        diag = diag.with_span(span);
+    }
+    if let Some(fix) = extract_cargo_lint_help(&block.lines) {
+        diag = diag.with_suggested_fix(fix);
+    }
+    Some(diag)
+}
+
+/// Parses Cargo's own `[lints.cargo]` (`cargo::*`) manifest diagnostics from stderr.
+pub(crate) fn parse_cargo_lint_stderr(stderr: &str, target_dir: &Path) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+    let mut current: Option<RawCargoDiagnosticBlock<'_>> = None;
+
+    for line in stderr.lines() {
+        if let Some((severity, message)) = parse_cargo_header(line) {
+            if let Some(prev) = current.take()
+                && let Some(diag) = build_cargo_lint_diagnostic(prev, target_dir)
+            {
+                diagnostics.push(diag);
+            }
+            current = Some(RawCargoDiagnosticBlock {
+                severity,
+                message,
+                lines: Vec::new(),
+            });
+        } else if let Some(active) = &mut current {
+            active.lines.push(line);
+        }
+    }
+
+    if let Some(last) = current
+        && let Some(diag) = build_cargo_lint_diagnostic(last, target_dir)
+    {
+        diagnostics.push(diag);
+    }
+
+    diagnostics
 }
 
 #[cfg(test)]
@@ -284,6 +375,70 @@ mod tests {
 "#;
         let diags = parse_clippy_json_stream(json, Path::new("."));
         assert_that!(diags.is_empty(), is_true());
+        Ok(())
+    }
+
+    #[googletest::test]
+    fn parse_cargo_lint_stderr_extracts_warnings_and_errors_with_spans()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let stderr = "\
+warning: package `bad_pkg` should have a kebab-case name
+ --> crates/sub/Cargo.toml:2:8
+  |
+2 | name = \"bad_pkg\"
+  |        ^^^^^^^^^
+  |
+  = note: `cargo::non_kebab_case_packages` is set to `warn` in `[lints]`
+help: to change the package name to `bad-pkg`, convert `package.name`
+  |
+2 - name = \"bad_pkg\"
+2 + name = \"bad-pkg\"
+  |
+warning: `bad_pkg` (manifest) generated 1 warning
+    Checking bad_pkg v0.1.0 (/workspace)
+error: unused dependency `itoa`
+ --> /workspace/Cargo.toml:10:1
+  |
+10 | itoa = \"1.0\"
+  | ^^^^^^^^^^^^
+  |
+  = note: `cargo::unused_dependencies` is set to `deny` in `[lints]`
+help: consider removing the dependency on `itoa`
+error: could not compile `bad_pkg` due to 1 previous error
+";
+        let diags = parse_cargo_lint_stderr(stderr, Path::new("/workspace"));
+        assert_that!(diags.len(), eq(2));
+
+        let first = diags.first().ok_or("expected first cargo lint")?;
+        assert_that!(&first.rule, eq("cargo::non_kebab_case_packages"));
+        assert_that!(first.severity, eq(Severity::Warning));
+        assert_that!(
+            &first.message,
+            eq("package `bad_pkg` should have a kebab-case name")
+        );
+        let span1 = first.span.as_ref().ok_or("expected first span")?;
+        assert_that!(span1.file, eq(&PathBuf::from("crates/sub/Cargo.toml")));
+        assert_that!(span1.start_line, eq(2));
+        assert_that!(span1.start_col, eq(8));
+        assert_that!(
+            first.suggested_fix.as_deref(),
+            eq(Some(
+                "to change the package name to `bad-pkg`, convert `package.name`"
+            ))
+        );
+
+        let second = diags.get(1).ok_or("expected second cargo lint")?;
+        assert_that!(&second.rule, eq("cargo::unused_dependencies"));
+        assert_that!(second.severity, eq(Severity::Error));
+        assert_that!(&second.message, eq("unused dependency `itoa`"));
+        let span2 = second.span.as_ref().ok_or("expected second span")?;
+        assert_that!(span2.file, eq(&PathBuf::from("Cargo.toml")));
+        assert_that!(span2.start_line, eq(10));
+        assert_that!(span2.start_col, eq(1));
+        assert_that!(
+            second.suggested_fix.as_deref(),
+            eq(Some("consider removing the dependency on `itoa`"))
+        );
         Ok(())
     }
 }

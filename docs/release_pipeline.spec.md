@@ -17,12 +17,12 @@ The pipeline implements a closed **Intent vs. Reality** verification loop:
 
 All four workspace crates are published to `crates.io` in topological dependency order:
 
-| Crate Path               | Package Name                  | Binary Target     | Internal Workspace Dependencies                                            | Synced Extra Files                                                                       |
-| ------------------------ | ----------------------------- | ----------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `crates/configure-lints` | `code-review-configure-lints` | `configure-lints` | None (leaf crate)                                                          | `/Cargo.toml` (`$.workspace.dependencies['code-review-configure-lints'].version`)        |
-| `crates/coverage`        | `code-review-coverage`        | `coverage`        | None (leaf crate)                                                          | `/Cargo.toml` (`$.workspace.dependencies['code-review-coverage'].version`)               |
-| `crates/check`           | `code-review-check`           | `check`           | None (leaf crate)                                                          | `/Cargo.toml` (`$.workspace.dependencies['code-review-check'].version`)                  |
-| `crates/code-review`     | `code-review`                 | `code-review`     | `code-review-configure-lints`, `code-review-coverage`, `code-review-check` | `/Cargo.toml` (`$.workspace.package.version`), `/flake.nix` (`x-release-please-version`) |
+| Crate Path               | Package Name                  | Binary Target     | Internal Workspace Dependencies                                            | Synced Extra Files                                                                |
+| ------------------------ | ----------------------------- | ----------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `crates/configure-lints` | `code-review-configure-lints` | `configure-lints` | None (leaf crate)                                                          | `/Cargo.toml` (`$.workspace.dependencies['code-review-configure-lints'].version`) |
+| `crates/coverage`        | `code-review-coverage`        | `coverage`        | None (leaf crate)                                                          | `/Cargo.toml` (`$.workspace.dependencies['code-review-coverage'].version`)        |
+| `crates/check`           | `code-review-check`           | `check`           | None (leaf crate)                                                          | `/Cargo.toml` (`$.workspace.dependencies['code-review-check'].version`)           |
+| `crates/code-review`     | `code-review`                 | `code-review`     | `code-review-configure-lints`, `code-review-coverage`, `code-review-check` | `/flake.nix` (`x-release-please-version`)                                         |
 
 ---
 

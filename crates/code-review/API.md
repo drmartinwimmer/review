@@ -70,7 +70,7 @@ Aggregates formatters, clippy, purist, audit, and coverage checks
 
 ### `code-review configure-lints`
 
-Configure or remove strict Clippy lints in Cargo.toml
+Configure or remove strict Rust, Cargo, and Clippy lints in Cargo.toml
 
 | Flag / Argument   | Type      | Required | Default      | Description                                        |
 | ----------------- | --------- | -------- | ------------ | -------------------------------------------------- |

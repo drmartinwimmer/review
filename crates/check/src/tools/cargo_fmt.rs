@@ -1,3 +1,4 @@
+use super::file_utils::normalize_path;
 use purist::{Diagnostic, Severity, Span};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -58,31 +59,26 @@ impl FmtRunner {
     }
 }
 
+fn parse_fmt_diff_header(line: &str) -> Option<(&str, usize)> {
+    let rest = line.trim().strip_prefix("Diff in ")?;
+    if let Some((file_part, line_part)) = rest.split_once(" at line ") {
+        let line_num = line_part.trim_suffix(':').trim().parse().unwrap_or(1);
+        return Some((file_part.trim(), line_num));
+    }
+    let (file_part, line_part) = rest.trim_suffix(':').rsplit_once(':')?;
+    let line_num = line_part.trim().parse().ok()?;
+    Some((file_part.trim(), line_num))
+}
+
 /// Parses the output of `cargo fmt --check` into structured diagnostics.
 pub fn parse_fmt_output(output: &str, target_dir: &Path) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
 
     for line in output.lines() {
-        let trimmed = line.trim();
-        // Standard rustfmt output: "Diff in /path/to/file.rs at line 10:"
-        if let Some(rest) = trimmed.strip_prefix("Diff in ")
-            && let Some((file_part, line_part)) = rest.split_once(" at line ")
-        {
-            let file_str = file_part.trim();
-            let line_str = line_part.trim_end_matches(':').trim();
-            let line_num: usize = line_str.parse().unwrap_or(1);
-
-            let raw_path = PathBuf::from(file_str);
-            let normalized_path = if raw_path.is_absolute() {
-                if let Ok(rel) = raw_path.strip_prefix(target_dir) {
-                    rel.to_path_buf()
-                } else {
-                    raw_path
-                }
-            } else {
-                raw_path
-            };
-
+        // Supports both "Diff in /path/to/file.rs:10:" (Rust 1.100+) and
+        // legacy "Diff in /path/to/file.rs at line 10:" rustfmt output.
+        if let Some((file_str, line_num)) = parse_fmt_diff_header(line) {
+            let normalized_path = normalize_path(Path::new(file_str), target_dir);
             let span = Span::new(normalized_path, line_num, 1, line_num, 1);
             diagnostics.push(
                 Diagnostic::new(
@@ -159,6 +155,32 @@ Diff in /workspace/src/main.rs at line 12:
         let span = diag.span.as_ref().ok_or("expected span")?;
         assert_that!(span.file, eq(&PathBuf::from("src/foo.rs")));
         assert_that!(span.start_line, eq(42));
+        Ok(())
+    }
+
+    #[googletest::test]
+    fn parse_colon_diff_fmt_output_extracts_file_and_line_span()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let output = "\
+Diff in /workspace/src/lib.rs:25:
+-fn test() {
++fn test() {
+Diff in src/main.rs:12:
+-let a=1;
++let a = 1;
+";
+        let diags = parse_fmt_output(output, Path::new("/workspace"));
+        assert_that!(diags.len(), eq(2));
+
+        let first = diags.first().ok_or("expected first diagnostic")?;
+        let span1 = first.span.as_ref().ok_or("expected first span")?;
+        assert_that!(span1.file, eq(&PathBuf::from("src/lib.rs")));
+        assert_that!(span1.start_line, eq(25));
+
+        let second = diags.get(1).ok_or("expected second diagnostic")?;
+        let span2 = second.span.as_ref().ok_or("expected second span")?;
+        assert_that!(span2.file, eq(&PathBuf::from("src/main.rs")));
+        assert_that!(span2.start_line, eq(12));
         Ok(())
     }
 }

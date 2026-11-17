@@ -1,5 +1,5 @@
 pub use crate::presets::LintProfile;
-use crate::presets::{LINT_CATEGORIES, LintCategory, RUST_LINTS};
+use crate::presets::{CARGO_LINTS, LINT_CATEGORIES, LintCategory, RUST_LINTS};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use toml_edit::{Item, Table, TomlError, Value, value};
@@ -33,7 +33,7 @@ pub enum CargoTomlError {
     },
 
     /// Returned when an expected table (such as `[workspace]`, `[package]`, `[lints]`,
-    /// `[lints.rust]`, or `[lints.clippy]`) exists in the document but is a scalar or
+    /// `[lints.cargo]`, `[lints.rust]`, or `[lints.clippy]`) exists in the document but is a scalar or
     /// array rather than a table or inline table.
     #[error("Invalid Cargo.toml structure: '{table}' is not a table")]
     NotATable { table: &'static str },
@@ -54,6 +54,13 @@ enum LintsScope {
 }
 
 impl LintsScope {
+    const fn cargo_table(self) -> &'static str {
+        match self {
+            Self::Workspace => "workspace.lints.cargo",
+            Self::Crate => "lints.cargo",
+        }
+    }
+
     const fn rust_table(self) -> &'static str {
         match self {
             Self::Workspace => "workspace.lints.rust",
@@ -74,6 +81,7 @@ fn validate_lints_subtables(
     scope: LintsScope,
 ) -> Result<(), CargoTomlError> {
     for (subtable, table_path) in [
+        ("cargo", scope.cargo_table()),
         ("rust", scope.rust_table()),
         ("clippy", scope.clippy_table()),
     ] {
@@ -225,8 +233,8 @@ fn update_existing_clippy_table(table: &mut toml_edit::Table, profile: LintProfi
     );
 }
 
-fn populate_rust_table(table: &mut toml_edit::Table, profile: LintProfile) {
-    for lint in RUST_LINTS {
+fn populate_preset_list_table(table: &mut toml_edit::Table, lints: &[&str], profile: LintProfile) {
+    for lint in lints {
         if profile.includes_lint(lint) {
             set_lint_to_warn(table, lint);
         }
@@ -253,25 +261,41 @@ fn set_lint_to_warn(table: &mut Table, lint: &str) {
     }
 }
 
+fn ensure_and_populate_subtable(
+    lints_table: &mut Table,
+    key: &str,
+    table_path: &'static str,
+    lints: &[&str],
+    profile: LintProfile,
+) -> Result<(), CargoTomlError> {
+    if !lints_table.contains_key(key) {
+        let mut subtable = Table::new();
+        subtable.set_implicit(false);
+        lints_table.insert(key, Item::Table(subtable));
+    }
+
+    let subtable = lints_table
+        .get_mut(key)
+        .and_then(|i| i.as_table_mut())
+        .ok_or(CargoTomlError::NotATable { table: table_path })?;
+
+    populate_preset_list_table(subtable, lints, profile);
+    Ok(())
+}
+
 fn populate_lints_subtables(
     lints_table: &mut Table,
     scope: LintsScope,
     profile: LintProfile,
 ) -> Result<(), CargoTomlError> {
-    if !lints_table.contains_key("rust") {
-        let mut rust_table = Table::new();
-        rust_table.set_implicit(false);
-        lints_table.insert("rust", Item::Table(rust_table));
-    }
-
-    let rust_table = lints_table
-        .get_mut("rust")
-        .and_then(|i| i.as_table_mut())
-        .ok_or(CargoTomlError::NotATable {
-            table: scope.rust_table(),
-        })?;
-
-    populate_rust_table(rust_table, profile);
+    ensure_and_populate_subtable(
+        lints_table,
+        "cargo",
+        scope.cargo_table(),
+        CARGO_LINTS,
+        profile,
+    )?;
+    ensure_and_populate_subtable(lints_table, "rust", scope.rust_table(), RUST_LINTS, profile)?;
 
     if !lints_table.contains_key("clippy") {
         let mut clippy_table = Table::new();
@@ -364,7 +388,7 @@ fn configure_crate_lints(
     populate_lints_subtables(lints_table, LintsScope::Crate, profile)
 }
 
-/// Configures strict Clippy lints in the specified Cargo.toml manifest.
+/// Configures strict Rust, Cargo, and Clippy lints in the specified Cargo.toml manifest.
 pub fn configure_lints(
     manifest_path: &Path,
     profile: LintProfile,
@@ -406,30 +430,35 @@ pub fn configure_lints(
     })
 }
 
-fn remove_configured_rust_lints(lints_table: &mut Table) -> usize {
+fn remove_configured_table_lints(
+    lints_table: &mut Table,
+    subtable_name: &str,
+    configured_lints: &[&str],
+) -> usize {
     let mut removed = 0;
-    let should_remove_rust_table = if let Some(rust_item) = lints_table.get_mut("rust")
-        && let Some(rust_table) = rust_item.as_table_like_mut()
+    let should_remove_table = if let Some(item) = lints_table.get_mut(subtable_name)
+        && let Some(subtable) = item.as_table_like_mut()
     {
-        for lint in RUST_LINTS {
-            if rust_table.remove(lint).is_some() {
+        for lint in configured_lints {
+            if subtable.remove(lint).is_some() {
                 removed += 1;
             }
         }
-        rust_table.is_empty()
+        subtable.is_empty()
     } else {
         false
     };
 
-    if should_remove_rust_table {
-        lints_table.remove("rust");
+    if should_remove_table {
+        lints_table.remove(subtable_name);
     }
 
     removed
 }
 
 fn remove_from_lints_table(lints_table: &mut Table) -> usize {
-    let mut removed_count = remove_configured_rust_lints(lints_table);
+    let mut removed_count = remove_configured_table_lints(lints_table, "cargo", CARGO_LINTS);
+    removed_count += remove_configured_table_lints(lints_table, "rust", RUST_LINTS);
     if let Some(clippy_item) = lints_table.remove("clippy")
         && let Some(clippy_table) = clippy_item.as_table_like()
     {
@@ -438,7 +467,7 @@ fn remove_from_lints_table(lints_table: &mut Table) -> usize {
     removed_count
 }
 
-/// Removes configured Clippy lints and associated tables from the specified Cargo.toml manifest.
+/// Removes configured Rust, Cargo, and Clippy lints and associated tables from the specified Cargo.toml manifest.
 pub fn remove_lints(manifest_path: &Path) -> Result<ConfigureResult, CargoTomlError> {
     if !manifest_path.exists() {
         return Err(CargoTomlError::ManifestNotFound {
@@ -546,7 +575,7 @@ serde = "1.0" # inline dep comment
         let manifest = TempManifest::new(original)?;
         let result = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(result.modified, is_true());
-        expect_that!(result.lints_configured, eq(51));
+        expect_that!(result.lints_configured, eq(67));
 
         let modified_content = manifest.read()?;
         expect_that!(modified_content, contains_substring("# Top-level comment"));
@@ -565,6 +594,11 @@ serde = "1.0" # inline dep comment
         expect_that!(
             modified_content,
             contains_substring("# Trailing comment at end")
+        );
+        expect_that!(modified_content, contains_substring("[lints.cargo]"));
+        expect_that!(
+            modified_content,
+            contains_substring("unused_dependencies = \"warn\"")
         );
         expect_that!(modified_content, contains_substring("[lints.rust]"));
         expect_that!(
@@ -588,13 +622,13 @@ version = "0.1.0"
         let manifest = TempManifest::new(initial)?;
         let res1 = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(res1.modified, is_true());
-        expect_that!(res1.lints_configured, eq(51));
+        expect_that!(res1.lints_configured, eq(67));
 
         let content_after_run1 = manifest.read()?;
 
         let res2 = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(res2.modified, is_false());
-        expect_that!(res2.lints_configured, eq(51));
+        expect_that!(res2.lints_configured, eq(67));
 
         let content_after_run2 = manifest.read()?;
         expect_that!(content_after_run1, eq(&content_after_run2));
@@ -610,9 +644,10 @@ members = ["crates/*"]
         let manifest = TempManifest::new(initial)?;
         let res = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(res.modified, is_true());
-        expect_that!(res.lints_configured, eq(51));
+        expect_that!(res.lints_configured, eq(67));
 
         let content = manifest.read()?;
+        expect_that!(content, contains_substring("[workspace.lints.cargo]"));
         expect_that!(content, contains_substring("[workspace.lints.rust]"));
         expect_that!(content, contains_substring("[workspace.lints.clippy]"));
         expect_that!(content, not(contains_substring("\n[lints]")));
@@ -633,9 +668,10 @@ members = ["crates/*"]
         let manifest = TempManifest::new(initial)?;
         let res = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(res.modified, is_true());
-        expect_that!(res.lints_configured, eq(51));
+        expect_that!(res.lints_configured, eq(67));
 
         let content = manifest.read()?;
+        expect_that!(content, contains_substring("[workspace.lints.cargo]"));
         expect_that!(content, contains_substring("[workspace.lints.rust]"));
         expect_that!(content, contains_substring("[workspace.lints.clippy]"));
         expect_that!(content, contains_substring("workspace = true"));
@@ -652,9 +688,10 @@ version = "0.1.0"
         let manifest = TempManifest::new(initial)?;
         let res = configure_lints(&manifest.path, LintProfile::Strict)?;
         expect_that!(res.modified, is_true());
-        expect_that!(res.lints_configured, eq(51));
+        expect_that!(res.lints_configured, eq(67));
 
         let content = manifest.read()?;
+        expect_that!(content, contains_substring("[lints.cargo]"));
         expect_that!(content, contains_substring("[lints.rust]"));
         expect_that!(content, contains_substring("[lints.clippy]"));
         expect_that!(content, not(contains_substring("[workspace")));
@@ -670,10 +707,26 @@ version = "0.1.0"
 "#;
         let manifest_strict = TempManifest::new(initial)?;
         let res_strict = configure_lints(&manifest_strict.path, LintProfile::Strict)?;
-        expect_that!(res_strict.lints_configured, eq(51));
+        expect_that!(res_strict.lints_configured, eq(67));
         let content_strict = manifest_strict.read()?;
         for expected in [
+            "non_kebab_case_bins = \"warn\"",
+            "non_kebab_case_packages = \"warn\"",
+            "redundant_homepage = \"warn\"",
+            "unused_dependencies = \"warn\"",
+            "unused_workspace_dependencies = \"warn\"",
+            "unused_workspace_package_fields = \"warn\"",
+            "ambiguous_negative_literals = \"warn\"",
+            "deref_into_dyn_supertrait = \"warn\"",
+            "impl_trait_redundant_captures = \"warn\"",
+            "macro_use_extern_crate = \"warn\"",
             "missing_copy_implementations = \"warn\"",
+            "non_ascii_idents = \"warn\"",
+            "redundant_lifetimes = \"warn\"",
+            "unit_bindings = \"warn\"",
+            "unsafe_op_in_unsafe_fn = \"warn\"",
+            "unused_lifetimes = \"warn\"",
+            "unused_macro_rules = \"warn\"",
             "string_slice = \"warn\"",
             "indexing_slicing = \"warn\"",
             "allow_attributes = \"warn\"",
@@ -696,10 +749,11 @@ version = "0.1.0"
         ] {
             expect_that!(content_strict, contains_substring(expected));
         }
+        expect_that!(content_strict, not(contains_substring("manual_readme")));
 
         let manifest_standard = TempManifest::new(initial)?;
         let res_standard = configure_lints(&manifest_standard.path, LintProfile::Standard)?;
-        expect_that!(res_standard.lints_configured, eq(48));
+        expect_that!(res_standard.lints_configured, eq(64));
         let content_standard = manifest_standard.read()?;
         expect_that!(
             content_standard,
@@ -727,6 +781,10 @@ version = "0.1.0"
         );
         expect_that!(
             content_standard,
+            contains_substring("unused_dependencies = \"warn\"")
+        );
+        expect_that!(
+            content_standard,
             contains_substring("redundant_clone = \"warn\"")
         );
         Ok(())
@@ -744,10 +802,14 @@ version = "0.1.0"
 
         let remove_res = remove_lints(&manifest.path)?;
         expect_that!(remove_res.modified, is_true());
-        expect_that!(remove_res.lints_configured, eq(51));
+        expect_that!(remove_res.lints_configured, eq(67));
 
         let content_after_remove = manifest.read()?;
         expect_that!(content_after_remove, not(contains_substring("[lints]")));
+        expect_that!(
+            content_after_remove,
+            not(contains_substring("[lints.cargo]"))
+        );
         expect_that!(
             content_after_remove,
             not(contains_substring("[lints.rust]"))
@@ -764,11 +826,14 @@ version = "0.1.0"
     }
 
     #[googletest::test]
-    fn remove_lints_with_existing_rust_lints_preserves_parent_table()
+    fn remove_lints_with_existing_rust_and_cargo_lints_preserves_parent_tables()
     -> Result<(), Box<dyn std::error::Error>> {
         let initial = r#"[package]
 name = "demo"
 version = "0.1.0"
+
+[lints.cargo]
+manual_readme = "allow"
 
 [lints.rust]
 unsafe_code = "forbid"
@@ -777,14 +842,24 @@ unsafe_code = "forbid"
         configure_lints(&manifest.path, LintProfile::Strict)?;
 
         let content_configured = manifest.read()?;
+        expect_that!(content_configured, contains_substring("[lints.cargo]"));
         expect_that!(content_configured, contains_substring("[lints.rust]"));
         expect_that!(content_configured, contains_substring("[lints.clippy]"));
 
         let remove_res = remove_lints(&manifest.path)?;
         expect_that!(remove_res.modified, is_true());
-        expect_that!(remove_res.lints_configured, eq(51));
+        expect_that!(remove_res.lints_configured, eq(67));
 
         let content_after_remove = manifest.read()?;
+        expect_that!(content_after_remove, contains_substring("[lints.cargo]"));
+        expect_that!(
+            content_after_remove,
+            contains_substring("manual_readme = \"allow\"")
+        );
+        expect_that!(
+            content_after_remove,
+            not(contains_substring("unused_dependencies"))
+        );
         expect_that!(content_after_remove, contains_substring("[lints.rust]"));
         expect_that!(
             content_after_remove,
@@ -853,6 +928,25 @@ version = "0.1.0"
                 );
             }
         }
+
+        let invalid_cargo_lints = r#"[package]
+name = "demo"
+version = "0.1.0"
+
+[lints]
+cargo = "invalid_scalar"
+"#;
+        let manifest3 = TempManifest::new(invalid_cargo_lints)?;
+        match configure_lints(&manifest3.path, LintProfile::Strict) {
+            Err(CargoTomlError::NotATable {
+                table: "lints.cargo",
+            }) => {}
+            other => {
+                return Err(
+                    format!("Expected NotATable for scalar lints.cargo, got {other:?}").into(),
+                );
+            }
+        }
         Ok(())
     }
 
@@ -892,7 +986,7 @@ members = ["crates/*"]
 
         let remove_res = remove_lints(&manifest.path)?;
         expect_that!(remove_res.modified, is_true());
-        expect_that!(remove_res.lints_configured, eq(51));
+        expect_that!(remove_res.lints_configured, eq(67));
 
         let content_after = manifest.read()?;
         expect_that!(content_after, not(contains_substring("[workspace.lints]")));
@@ -926,7 +1020,7 @@ members = ["crates/*"]
 
         let remove_res = remove_lints(&manifest.path)?;
         expect_that!(remove_res.modified, is_true());
-        expect_that!(remove_res.lints_configured, eq(51));
+        expect_that!(remove_res.lints_configured, eq(67));
 
         let content_after = manifest.read()?;
         expect_that!(content_after, not(contains_substring("[workspace.lints]")));
@@ -952,7 +1046,7 @@ version = "0.1.0"
 
         let res_standard = configure_lints(&manifest.path, LintProfile::Standard)?;
         expect_that!(res_standard.modified, is_true());
-        expect_that!(res_standard.lints_configured, eq(48));
+        expect_that!(res_standard.lints_configured, eq(64));
 
         let content_standard = manifest.read()?;
         expect_that!(content_standard, not(contains_substring("string_slice")));

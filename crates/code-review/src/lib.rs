@@ -37,7 +37,7 @@ pub enum Commands {
     /// Aggregates formatters, clippy, purist, audit, and coverage checks
     Check(CheckCommand),
 
-    /// Configure or remove strict Clippy lints in Cargo.toml
+    /// Configure or remove strict Rust, Cargo, and Clippy lints in Cargo.toml
     #[command(name = "configure-lints")]
     ConfigureLints(ConfigureLintsCommand),
 

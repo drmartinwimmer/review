@@ -4,7 +4,7 @@ mod presets;
 pub use cargo_toml::{CargoTomlError, ConfigureResult, LintProfile, configure_lints, remove_lints};
 use std::path::{Path, PathBuf};
 
-/// Command-line arguments for configuring or removing Clippy lints in Cargo.toml.
+/// Command-line arguments for configuring or removing Rust, Cargo, and Clippy lints in Cargo.toml.
 #[derive(clap::Args, Debug, Clone, PartialEq, Eq)]
 pub struct ConfigureLintsCommand {
     /// Path to the Cargo.toml manifest to configure
@@ -60,20 +60,20 @@ impl ConfigureLintsCommand {
         self.quiet
     }
 
-    /// Executes the configuration or removal of Clippy lints in the target manifest.
+    /// Executes the configuration or removal of Rust, Cargo, and Clippy lints in the target manifest.
     pub fn run(self) -> Result<(), CargoTomlError> {
         if self.remove {
             let result = remove_lints(&self.manifest_path)?;
             if !self.quiet {
                 if result.modified {
                     eprintln!(
-                        "Removed {} Clippy lints from '{}'.",
+                        "Removed {} lints from '{}'.",
                         result.lints_configured,
                         self.manifest_path.display()
                     );
                 } else {
                     eprintln!(
-                        "No Clippy lints found in '{}'. Manifest unchanged.",
+                        "No configured lints found in '{}'. Manifest unchanged.",
                         self.manifest_path.display()
                     );
                 }
@@ -83,14 +83,14 @@ impl ConfigureLintsCommand {
             if !self.quiet {
                 if result.modified {
                     eprintln!(
-                        "Configured {} Clippy lints ({:?} profile) in '{}'.",
+                        "Configured {} lints ({:?} profile) in '{}'.",
                         result.lints_configured,
                         self.profile,
                         self.manifest_path.display()
                     );
                 } else {
                     eprintln!(
-                        "Manifest '{}' already configured with {} Clippy lints ({:?} profile). Manifest unchanged.",
+                        "Manifest '{}' already configured with {} lints ({:?} profile). Manifest unchanged.",
                         self.manifest_path.display(),
                         result.lints_configured,
                         self.profile

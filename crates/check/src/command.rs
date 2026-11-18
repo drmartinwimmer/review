@@ -1,10 +1,11 @@
+use crate::diagnostics::DiagnosticReport;
+use crate::reporter::{OutputFormat, render_report};
 use crate::tools::{
     ApiError, ApiRunner, AuditRunner, ClippyRunner, FmtRunner, JjError, JjVcs, JsonRunner,
-    MarkdownRunner, PuristRunner, TomlRunner, aggregate_diagnostics,
-    filter_diagnostics_by_changed_files,
+    MarkdownRunner, PuristRunner, TomlRunner, filter_diagnostics_by_changed_files,
 };
 use clap::Args;
-use purist::{DiagnosticReport, OutputFormat, render_report};
+use std::io;
 use std::path::{Path, PathBuf};
 
 /// Severity threshold triggering non-zero exit code.
@@ -41,7 +42,7 @@ pub enum CheckError {
     Api(#[from] ApiError),
 
     #[error("I/O error during check execution: {0}")]
-    Io(#[from] std::io::Error),
+    Io(#[from] io::Error),
 
     #[error("Check violations found ({count} issues exceed failure threshold)")]
     ViolationsFound { count: usize },
@@ -218,11 +219,6 @@ impl CheckCommand {
         self
     }
 
-    /// Backwards compatibility alias for `with_purist`.
-    pub fn with_opinionated(self, enabled: bool) -> Self {
-        self.with_purist(enabled)
-    }
-
     /// Enables or disables cargo audit dependency security scan.
     pub fn with_audit(mut self, enabled: bool) -> Self {
         self.audit = enabled;
@@ -288,11 +284,6 @@ impl CheckCommand {
         self.purist
     }
 
-    /// Backwards compatibility alias for `is_purist_enabled`.
-    pub fn is_opinionated_enabled(&self) -> bool {
-        self.purist
-    }
-
     /// Returns whether cargo audit is enabled.
     pub fn is_audit_enabled(&self) -> bool {
         self.audit
@@ -331,74 +322,32 @@ impl CheckCommand {
             return Err(CheckError::PathNotFound(target_dir.to_path_buf()));
         }
 
-        let fmt_diags = if !self.fmt {
-            Vec::new()
-        } else {
-            let runner = FmtRunner::new(target_dir);
-            runner.run()?
-        };
+        let mut aggregated = DiagnosticReport::default();
 
-        let clippy_diags = if !self.clippy {
-            Vec::new()
-        } else {
-            let runner = ClippyRunner::new(target_dir);
-            runner.run()?
-        };
-
-        let purist_report = if !self.purist {
-            DiagnosticReport::default()
-        } else {
-            let runner = PuristRunner::new(target_dir);
-            runner.run()?
-        };
-
-        let audit_diags = if !self.audit {
-            Vec::new()
-        } else {
-            let runner = AuditRunner::new(target_dir);
-            runner.run()?
-        };
-
-        let markdown_diags = if !self.markdown {
-            Vec::new()
-        } else {
-            let runner = MarkdownRunner::new(target_dir);
-            runner.run()?
-        };
-
-        let toml_diags = if !self.toml {
-            Vec::new()
-        } else {
-            let runner = TomlRunner::new(target_dir);
-            runner.run()?
-        };
-
-        let json_diags = if !self.json {
-            Vec::new()
-        } else {
-            let runner = JsonRunner::new(target_dir);
-            runner.run()?
-        };
-
-        let api_diags = if !self.api {
-            Vec::new()
-        } else {
-            let runner = ApiRunner::new(target_dir);
-            runner.run()?
-        };
-
-        let mut all_diags = aggregate_diagnostics(
-            fmt_diags,
-            clippy_diags,
-            purist_report,
-            audit_diags,
-            markdown_diags,
-            toml_diags,
-            json_diags,
-        )
-        .diagnostics;
-        all_diags.extend(api_diags);
-        let aggregated = DiagnosticReport::new(all_diags);
+        if self.fmt {
+            aggregated.extend(FmtRunner::new(target_dir).run()?);
+        }
+        if self.clippy {
+            aggregated.extend(ClippyRunner::new(target_dir).run()?);
+        }
+        if self.purist {
+            aggregated.extend(PuristRunner::new(target_dir).run()?);
+        }
+        if self.audit {
+            aggregated.extend(AuditRunner::new(target_dir).run()?);
+        }
+        if self.markdown {
+            aggregated.extend(MarkdownRunner::new(target_dir).run()?);
+        }
+        if self.toml {
+            aggregated.extend(TomlRunner::new(target_dir).run()?);
+        }
+        if self.json {
+            aggregated.extend(JsonRunner::new(target_dir).run()?);
+        }
+        if self.api {
+            aggregated.extend(ApiRunner::new(target_dir).run()?);
+        }
 
         if self.changed_only {
             let vcs = JjVcs::new(target_dir);
@@ -419,7 +368,7 @@ impl CheckCommand {
         let fail_on = self.fail_on;
         let report = self.execute()?;
 
-        render_report(&report, format, &mut std::io::stdout())?;
+        render_report(&report, format, &mut io::stdout())?;
 
         let fails = match fail_on {
             FailOn::Warnings => report.has_errors() || report.warning_count() > 0,
@@ -466,7 +415,6 @@ mod tests {
         assert_that!(cmd.is_fmt_enabled(), is_false());
         assert_that!(cmd.is_clippy_enabled(), is_false());
         assert_that!(cmd.is_purist_enabled(), is_false());
-        assert_that!(cmd.is_opinionated_enabled(), is_false());
         assert_that!(cmd.is_audit_enabled(), is_false());
         assert_that!(cmd.is_markdown_enabled(), is_false());
         assert_that!(cmd.is_toml_enabled(), is_false());

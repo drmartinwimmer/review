@@ -1,7 +1,9 @@
+use crate::diagnostics::{Diagnostic, Severity, Span, span_labels};
 use api_manifest::{
-    ApiManifest, ApiManifestError, Diagnostic as ApiDiagnostic, Severity as ApiSeverity,
+    ApiManifest, ApiManifestError, Diagnostic as RawApiDiagnostic, Severity as ApiSeverity,
 };
-use purist::{Diagnostic, Severity, Span};
+use miette::{LabeledSpan, SourceCode};
+use std::fmt;
 use std::path::{Path, PathBuf};
 
 /// Error type for API manifest verification.
@@ -10,6 +12,48 @@ pub enum ApiError {
     /// Error from `api-manifest` inspection or manifest checking.
     #[error("API manifest check error: {0}")]
     Manifest(#[from] ApiManifestError),
+}
+
+/// Diagnostic emitted by [`ApiRunner`] when public API drift is detected against `API.md`.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{message}")]
+pub struct ApiDiagnostic {
+    pub code: String,
+    pub severity: Severity,
+    pub message: String,
+    pub span: Option<Span>,
+    pub suggested_fix: Option<String>,
+}
+
+impl ApiDiagnostic {
+    /// Returns the source [`Span`] associated with this diagnostic, if any.
+    pub const fn span(&self) -> Option<&Span> {
+        self.span.as_ref()
+    }
+}
+
+impl Diagnostic for ApiDiagnostic {
+    fn code<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
+        Some(Box::new(&self.code))
+    }
+
+    fn severity(&self) -> Option<Severity> {
+        Some(self.severity)
+    }
+
+    fn help<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
+        self.suggested_fix
+            .as_deref()
+            .map(|fix| Box::new(fix) as Box<dyn fmt::Display>)
+    }
+
+    fn source_code(&self) -> Option<&dyn SourceCode> {
+        self.span().map(|s| s as &dyn SourceCode)
+    }
+
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
+        self.span().map(span_labels)
+    }
 }
 
 /// Runner for public API manifest drift verification (`API.md`).
@@ -26,7 +70,7 @@ impl ApiRunner {
     }
 
     /// Executes API drift verification against all found `API.md` manifests.
-    pub fn run(&self) -> Result<Vec<Diagnostic>, ApiError> {
+    pub fn run(&self) -> Result<Vec<ApiDiagnostic>, ApiError> {
         let root = if self.target_path.as_os_str().is_empty() {
             Path::new(".")
         } else {
@@ -43,28 +87,24 @@ impl ApiRunner {
     }
 }
 
-fn convert_diagnostic(diag: ApiDiagnostic) -> Diagnostic {
+fn convert_diagnostic(diag: RawApiDiagnostic) -> ApiDiagnostic {
     let severity = match diag.severity {
-        ApiSeverity::Hint => Severity::Hint,
-        ApiSeverity::Info => Severity::Info,
-        ApiSeverity::Warning => Severity::Warning,
         ApiSeverity::Error => Severity::Error,
+        ApiSeverity::Warning => Severity::Warning,
+        ApiSeverity::Info | ApiSeverity::Hint => Severity::Advice,
     };
 
-    let mut mapped = Diagnostic::new(diag.rule, severity, diag.message);
-    if let Some(span) = diag.span {
-        mapped = mapped.with_span(Span::new(
-            span.file,
-            span.start_line,
-            span.start_col,
-            span.end_line,
-            span.end_col,
-        ));
+    let span = diag
+        .span
+        .map(|s| Span::new(s.file, s.start_line, s.start_col, s.end_line, s.end_col));
+
+    ApiDiagnostic {
+        code: diag.rule,
+        severity,
+        message: diag.message,
+        span,
+        suggested_fix: diag.suggested_fix,
     }
-    if let Some(fix) = diag.suggested_fix {
-        mapped = mapped.with_suggested_fix(fix);
-    }
-    mapped
 }
 
 #[cfg(test)]
@@ -138,8 +178,11 @@ mod tests {
         let diags = runner.run()?;
         assert_that!(diags.len(), eq(1));
         let diag = diags.first().ok_or("diag missing")?;
-        assert_that!(diag.severity, eq(Severity::Error));
-        assert_that!(&diag.rule, eq("api::drift::removal"));
+        assert_that!(diag.severity(), some(eq(Severity::Error)));
+        assert_that!(
+            diag.code().map(|c| c.to_string()),
+            some(eq("api::drift::removal"))
+        );
 
         Ok(())
     }

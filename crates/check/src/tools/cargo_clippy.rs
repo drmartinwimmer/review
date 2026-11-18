@@ -1,8 +1,72 @@
 use super::file_utils::normalize_path;
-use purist::{Diagnostic, Severity, Span};
+use crate::diagnostics::{Diagnostic, Severity, Span, span_labels};
+use miette::{LabeledSpan, SourceCode};
 use serde::Deserialize;
+use std::fmt;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+/// Diagnostics emitted by [`ClippyRunner`].
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ClippyDiagnostic {
+    /// A compiler, Clippy, or Cargo manifest lint diagnostic.
+    #[error("{message}")]
+    CompilerMessage {
+        code: String,
+        severity: Severity,
+        message: String,
+        span: Option<Span>,
+        suggested_fix: Option<String>,
+    },
+
+    /// `cargo clippy` failed with a non-zero exit code without emitting compiler JSON diagnostics.
+    #[error("{details}")]
+    ExecutionFailure { details: String },
+}
+
+impl ClippyDiagnostic {
+    /// Returns the source [`Span`] associated with this diagnostic, if any.
+    pub const fn span(&self) -> Option<&Span> {
+        match self {
+            Self::CompilerMessage { span, .. } => span.as_ref(),
+            Self::ExecutionFailure { .. } => None,
+        }
+    }
+}
+
+impl Diagnostic for ClippyDiagnostic {
+    fn code<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
+        match self {
+            Self::CompilerMessage { code, .. } => Some(Box::new(code)),
+            Self::ExecutionFailure { .. } => Some(Box::new("clippy::execution")),
+        }
+    }
+
+    fn severity(&self) -> Option<Severity> {
+        match self {
+            Self::CompilerMessage { severity, .. } => Some(*severity),
+            Self::ExecutionFailure { .. } => Some(Severity::Error),
+        }
+    }
+
+    fn help<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
+        match self {
+            Self::CompilerMessage { suggested_fix, .. } => suggested_fix
+                .as_deref()
+                .map(|fix| Box::new(fix) as Box<dyn fmt::Display>),
+            Self::ExecutionFailure { .. } => None,
+        }
+    }
+
+    fn source_code(&self) -> Option<&dyn SourceCode> {
+        self.span().map(|s| s as &dyn SourceCode)
+    }
+
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
+        self.span().map(span_labels)
+    }
+}
 
 /// Runner for `cargo clippy --message-format=json`.
 pub struct ClippyRunner {
@@ -18,7 +82,7 @@ impl ClippyRunner {
     }
 
     /// Executes `cargo clippy` and parses compiler messages into diagnostics.
-    pub fn run(&self) -> Result<Vec<Diagnostic>, std::io::Error> {
+    pub fn run(&self) -> Result<Vec<ClippyDiagnostic>, io::Error> {
         let manifest_path = if self.target_path.is_file() {
             self.target_path.clone()
         } else {
@@ -44,17 +108,13 @@ impl ClippyRunner {
         diagnostics.extend(parse_clippy_json_stream(&stdout, &self.target_path));
 
         if !output.status.success() && diagnostics.is_empty() {
-            let error_msg = if !stderr.trim().is_empty() {
+            let details = if !stderr.trim().is_empty() {
                 stderr.trim().to_string()
             } else {
                 "Clippy execution failed with non-zero exit code".to_string()
             };
 
-            diagnostics.push(Diagnostic::new(
-                "clippy::execution",
-                Severity::Error,
-                error_msg,
-            ));
+            diagnostics.push(ClippyDiagnostic::ExecutionFailure { details });
         }
 
         Ok(diagnostics)
@@ -106,7 +166,7 @@ struct RustcChildMessage {
 }
 
 /// Parses a stream of newline-delimited JSON compiler messages into diagnostics.
-pub fn parse_clippy_json_stream(stream: &str, target_dir: &Path) -> Vec<Diagnostic> {
+pub fn parse_clippy_json_stream(stream: &str, target_dir: &Path) -> Vec<ClippyDiagnostic> {
     let mut diagnostics = Vec::new();
 
     for line in stream.lines() {
@@ -135,16 +195,14 @@ pub fn parse_clippy_json_stream(stream: &str, target_dir: &Path) -> Vec<Diagnost
         let severity = match msg.level.as_str() {
             "error" => Severity::Error,
             "warning" => Severity::Warning,
-            "help" => Severity::Hint,
-            _ => Severity::Info,
+            _ => Severity::Advice,
         };
 
-        let rule = msg
+        let code = msg
             .code
             .as_ref()
             .map_or_else(|| format!("rustc::{}", msg.level), |c| c.code.clone());
 
-        // Find primary span or fallback to first available span
         let primary_span = msg
             .spans
             .iter()
@@ -164,21 +222,18 @@ pub fn parse_clippy_json_stream(stream: &str, target_dir: &Path) -> Vec<Diagnost
             .with_byte_offsets(s.byte_start, s.byte_end)
         });
 
-        // Determine suggested fix from primary span replacement or child help messages
         let suggested_fix = primary_span
             .and_then(|s| s.suggested_replacement.clone())
             .filter(|r| !r.is_empty())
             .or_else(|| extract_child_suggested_fix(&msg.children));
 
-        let mut diag = Diagnostic::new(rule, severity, msg.message);
-        if let Some(s) = span {
-            diag = diag.with_span(s);
-        }
-        if let Some(fix) = suggested_fix {
-            diag = diag.with_suggested_fix(fix);
-        }
-
-        diagnostics.push(diag);
+        diagnostics.push(ClippyDiagnostic::CompilerMessage {
+            code,
+            severity,
+            message: msg.message,
+            span,
+            suggested_fix,
+        });
     }
 
     diagnostics
@@ -262,20 +317,21 @@ fn extract_cargo_lint_help(lines: &[&str]) -> Option<String> {
 fn build_cargo_lint_diagnostic(
     block: RawCargoDiagnosticBlock<'_>,
     target_dir: &Path,
-) -> Option<Diagnostic> {
-    let rule = extract_cargo_lint_rule(&block.lines)?;
-    let mut diag = Diagnostic::new(rule, block.severity, block.message);
-    if let Some(span) = extract_cargo_lint_span(&block.lines, target_dir) {
-        diag = diag.with_span(span);
-    }
-    if let Some(fix) = extract_cargo_lint_help(&block.lines) {
-        diag = diag.with_suggested_fix(fix);
-    }
-    Some(diag)
+) -> Option<ClippyDiagnostic> {
+    let code = extract_cargo_lint_rule(&block.lines)?;
+    let span = extract_cargo_lint_span(&block.lines, target_dir);
+    let suggested_fix = extract_cargo_lint_help(&block.lines);
+    Some(ClippyDiagnostic::CompilerMessage {
+        code,
+        severity: block.severity,
+        message: block.message.to_string(),
+        span,
+        suggested_fix,
+    })
 }
 
 /// Parses Cargo's own `[lints.cargo]` (`cargo::*`) manifest diagnostics from stderr.
-pub(crate) fn parse_cargo_lint_stderr(stderr: &str, target_dir: &Path) -> Vec<Diagnostic> {
+pub(crate) fn parse_cargo_lint_stderr(stderr: &str, target_dir: &Path) -> Vec<ClippyDiagnostic> {
     let mut diagnostics = Vec::new();
     let mut current: Option<RawCargoDiagnosticBlock<'_>> = None;
 
@@ -335,18 +391,24 @@ mod tests {
         assert_that!(diags.len(), eq(1));
 
         let diag = diags.first().ok_or("expected diagnostic")?;
-        assert_that!(&diag.rule, eq("clippy::redundant_clone"));
-        assert_that!(diag.severity, eq(Severity::Warning));
-        assert_that!(&diag.message, eq("redundant clone"));
+        assert_that!(
+            diag.code().map(|c| c.to_string()),
+            some(eq("clippy::redundant_clone"))
+        );
+        assert_that!(diag.severity(), some(eq(Severity::Warning)));
+        assert_that!(diag.to_string(), eq("redundant clone"));
 
-        let span = diag.span.as_ref().ok_or("expected span")?;
+        let span = diag.span().ok_or("expected span")?;
         assert_that!(span.file, eq(&PathBuf::from("src/main.rs")));
         assert_that!(span.start_line, eq(5));
         assert_that!(span.start_col, eq(8));
         assert_that!(span.end_line, eq(5));
         assert_that!(span.end_col, eq(18));
 
-        assert_that!(diag.suggested_fix.as_deref(), eq(Some("remove this call")));
+        assert_that!(
+            diag.help().map(|h| h.to_string()),
+            some(eq("remove this call"))
+        );
         Ok(())
     }
 
@@ -359,10 +421,10 @@ mod tests {
         assert_that!(diags.len(), eq(1));
 
         let diag = diags.first().ok_or("expected diagnostic")?;
-        assert_that!(&diag.rule, eq("E0425"));
-        assert_that!(diag.severity, eq(Severity::Error));
+        assert_that!(diag.code().map(|c| c.to_string()), some(eq("E0425")));
+        assert_that!(diag.severity(), some(eq(Severity::Error)));
         assert_that!(
-            &diag.message,
+            diag.to_string(),
             contains_substring("cannot find value `x` in this scope")
         );
         Ok(())
@@ -410,34 +472,40 @@ error: could not compile `bad_pkg` due to 1 previous error
         assert_that!(diags.len(), eq(2));
 
         let first = diags.first().ok_or("expected first cargo lint")?;
-        assert_that!(&first.rule, eq("cargo::non_kebab_case_packages"));
-        assert_that!(first.severity, eq(Severity::Warning));
         assert_that!(
-            &first.message,
+            first.code().map(|c| c.to_string()),
+            some(eq("cargo::non_kebab_case_packages"))
+        );
+        assert_that!(first.severity(), some(eq(Severity::Warning)));
+        assert_that!(
+            first.to_string(),
             eq("package `bad_pkg` should have a kebab-case name")
         );
-        let span1 = first.span.as_ref().ok_or("expected first span")?;
+        let span1 = first.span().ok_or("expected first span")?;
         assert_that!(span1.file, eq(&PathBuf::from("crates/sub/Cargo.toml")));
         assert_that!(span1.start_line, eq(2));
         assert_that!(span1.start_col, eq(8));
         assert_that!(
-            first.suggested_fix.as_deref(),
-            eq(Some(
+            first.help().map(|h| h.to_string()),
+            some(eq(
                 "to change the package name to `bad-pkg`, convert `package.name`"
             ))
         );
 
         let second = diags.get(1).ok_or("expected second cargo lint")?;
-        assert_that!(&second.rule, eq("cargo::unused_dependencies"));
-        assert_that!(second.severity, eq(Severity::Error));
-        assert_that!(&second.message, eq("unused dependency `itoa`"));
-        let span2 = second.span.as_ref().ok_or("expected second span")?;
+        assert_that!(
+            second.code().map(|c| c.to_string()),
+            some(eq("cargo::unused_dependencies"))
+        );
+        assert_that!(second.severity(), some(eq(Severity::Error)));
+        assert_that!(second.to_string(), eq("unused dependency `itoa`"));
+        let span2 = second.span().ok_or("expected second span")?;
         assert_that!(span2.file, eq(&PathBuf::from("Cargo.toml")));
         assert_that!(span2.start_line, eq(10));
         assert_that!(span2.start_col, eq(1));
         assert_that!(
-            second.suggested_fix.as_deref(),
-            eq(Some("consider removing the dependency on `itoa`"))
+            second.help().map(|h| h.to_string()),
+            some(eq("consider removing the dependency on `itoa`"))
         );
         Ok(())
     }

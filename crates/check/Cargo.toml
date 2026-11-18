@@ -10,9 +10,18 @@ readme = "README.md"
 [[bin]]
 name = "check"
 path = "src/main.rs"
+required-features = ["fancy"]
+
+[features]
+default = ["fancy"]
+fancy = ["miette/fancy", "purist/fancy"]
 
 [dependencies]
+annotate-snippets = { workspace = true }
+anstyle = { workspace = true }
+anstyle-query = { workspace = true }
 clap = { workspace = true }
+miette = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

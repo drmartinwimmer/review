@@ -10,6 +10,11 @@ readme = "README.md"
 [[bin]]
 name = "code-review"
 path = "src/main.rs"
+required-features = ["fancy"]
+
+[features]
+default = ["fancy"]
+fancy = ["code-review-check/fancy", "purist/fancy"]
 
 [dependencies]
 clap = { workspace = true }

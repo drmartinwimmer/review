@@ -307,7 +307,6 @@ mod tests {
                 expect_that!(cmd.is_fmt_enabled(), is_false());
                 expect_that!(cmd.is_clippy_enabled(), is_false());
                 expect_that!(cmd.is_purist_enabled(), is_false());
-                expect_that!(cmd.is_opinionated_enabled(), is_false());
                 expect_that!(cmd.is_audit_enabled(), is_false());
                 expect_that!(cmd.is_markdown_enabled(), is_false());
                 expect_that!(cmd.is_toml_enabled(), is_false());
@@ -328,7 +327,6 @@ mod tests {
         match cli.command() {
             Commands::Check(cmd) => {
                 expect_that!(cmd.is_purist_enabled(), is_false());
-                expect_that!(cmd.is_opinionated_enabled(), is_false());
             }
             _ => return Err("Expected Check subcommand".into()),
         }
